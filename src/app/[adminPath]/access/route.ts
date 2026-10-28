@@ -1,6 +1,6 @@
 import {NextRequest,NextResponse} from 'next/server';
 import {ADMIN_COOKIE,adminPathMatches,checkAdminPassword,createAdminSession} from '@/lib/activity-crypto';
-import {activityLocation} from '@/lib/activity-location';
+import {requestAddress} from '@/lib/activity-location';
 import {claimAdminAttempt} from '@/lib/activity-store';
 import {modelRequestAllowed} from '@/lib/model-request-origin';
 export const runtime='nodejs';
@@ -11,7 +11,7 @@ export async function POST(request:NextRequest,{params}:Context){
  if(!modelRequestAllowed(request))return new Response(null,{status:403});
  let body;try{const text=await request.text();if(text.length>1000)return new Response(null,{status:413});body=JSON.parse(text)}catch{return new Response(null,{status:400})}
  try{
-  if(!await claimAdminAttempt(activityLocation(request.headers).ip))return NextResponse.json({error:'로그인 시도가 많습니다. 최대 10분 후 다시 시도해주세요.'},{status:429,headers:{'Cache-Control':'no-store','Retry-After':'600'}});
+  if(!await claimAdminAttempt(requestAddress(request.headers).ip))return NextResponse.json({error:'로그인 시도가 많습니다. 최대 10분 후 다시 시도해주세요.'},{status:429,headers:{'Cache-Control':'no-store','Retry-After':'600'}});
   if(!checkAdminPassword(body?.password))return NextResponse.json({error:'비밀번호가 일치하지 않습니다.'},{status:401,headers:{'Cache-Control':'no-store'}});
   const response=NextResponse.json({ok:true},{headers:{'Cache-Control':'no-store'}});
   response.cookies.set(ADMIN_COOKIE,createAdminSession(),{httpOnly:true,secure:process.env.VERCEL==='1',sameSite:'strict',path:'/'+adminPath,maxAge:8*60*60});

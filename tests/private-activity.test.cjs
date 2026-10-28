@@ -5,10 +5,10 @@ const adminPath='inspect-test-route-with-32-random-characters';
 const testPassword='test-password-valid-only';
 const salt='test-salt',hash='s1:'+salt+':'+crypto.scryptSync(testPassword,salt,64).toString('hex');
 const env={VERCEL:'1',LEGAL_CONNECTION_SECRET:secret,LEGAL_ADMIN_PATH:adminPath,LEGAL_ADMIN_PASSWORD_HASH:hash};
-function load(name,overrides={},extra={}){
+function load(name,overrides={},extra={},globals={}){
  const source=fs.readFileSync(path.join(__dirname,'../src/lib',name+'.ts'),'utf8');
  const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
- const exports={};vm.runInNewContext(compiled,{exports,require:id=>id==='server-only'?{}:overrides[id]||(id.startsWith('@/geo/')?require(path.join(__dirname,'../src/geo',id.slice(6))):require(id)),process:{env:{...env,...extra},cwd:()=>'/test-workspace'},Buffer,Headers,Response,Date,setTimeout,console});return exports;
+ const exports={};vm.runInNewContext(compiled,{exports,require:id=>id==='server-only'?{}:overrides[id]||(id.startsWith('@/geo/')?require(path.join(__dirname,'../src/geo',id.slice(6))):require(id)),process:{env:{...env,...extra},cwd:()=>'/test-workspace'},Buffer,Headers,Response,Date,setTimeout,clearTimeout,console,...globals});return exports;
 }
 test('password-only admin authentication checks the hash and expires signed sessions',()=>{
  const api=load('activity-crypto');
@@ -26,25 +26,27 @@ test('activity records are authenticated ciphertext and cannot be read with anot
  assert.throws(()=>api.decryptActivity(encrypted.slice(0,-8)+'tampered'));
  assert.throws(()=>load('activity-crypto',{}, {LEGAL_CONNECTION_SECRET:'a-different-test-secret-at-least-32-characters'}).decryptActivity(encrypted));
 });
-test('IP geolocation uses supplied city data and never invents a Seoul district',()=>{
+test('IP geolocation uses supplied city data and never invents a Seoul district',async()=>{
  const {activityLocation}=load('activity-location');
  const header=new Headers({'x-vercel-forwarded-for':'203.0.113.1','x-vercel-ip-country':'KR','x-vercel-ip-country-region':'11','x-vercel-ip-city':'Seoul'});
- let value=activityLocation(header);assert.equal(value.city,'서울특별시');assert.equal(value.district,'');
- header.set('x-vercel-ip-city','Gangnam-gu');value=activityLocation(header);assert.equal(value.location,'서울특별시 강남구');
- header.set('x-vercel-ip-city',encodeURIComponent('성동구'));assert.equal(activityLocation(header).district,'성동구');
- header.set('x-vercel-ip-country-region','26');header.set('x-vercel-ip-city','Jung-gu');assert.equal(activityLocation(header).district,'');
- assert.equal(activityLocation(new Headers()).location,'지역 확인 불가');
+ let value=await activityLocation(header);assert.equal(value.city,'서울특별시');assert.equal(value.district,'');assert.equal(value.locationNote,'이 IP에는 서울 구를 판별할 위치 정보가 없습니다.');
+ header.set('x-vercel-ip-city','Gangnam-gu');value=await activityLocation(header);assert.equal(value.location,'서울특별시 강남구');
+ header.set('x-vercel-ip-city',encodeURIComponent('성동구'));assert.equal((await activityLocation(header)).district,'성동구');
+ header.set('x-vercel-ip-country-region','26');header.set('x-vercel-ip-city','Jung-gu');assert.equal((await activityLocation(header)).district,'');
+ assert.equal((await activityLocation(new Headers())).location,'지역 확인 불가');
 });
 
-test('Seoul postcode evidence takes priority over approximate IP coordinates and marks disagreement',()=>{
- const {activityLocation,seoulPostalDistrict}=load('activity-location');
+test('Seoul postcode evidence wins over approximate IP coordinates and conflicting evidence is reported',async()=>{
+ const {activityLocation,seoulPostalDistrict,seoulPostalPrefixDistrict}=load('activity-location');
  assert.equal(seoulPostalDistrict('06090'),'강남구');assert.equal(seoulPostalDistrict('04524'),'중구');
  for(const value of ['6090','99999','00000','06400','04524evil',''])assert.equal(seoulPostalDistrict(value),'');
+ assert.equal(seoulPostalPrefixDistrict('018'),'노원구');assert.equal(seoulPostalPrefixDistrict('055'),'송파구');assert.equal(seoulPostalPrefixDistrict('043'),'용산구');
+ for(const value of ['18','1800','1','','88x'])assert.equal(seoulPostalPrefixDistrict(value),'');
  const header=new Headers({'x-vercel-forwarded-for':'203.0.113.1','x-vercel-ip-country':'KR','x-vercel-ip-country-region':'11','x-vercel-ip-city':'Seoul','x-vercel-ip-postal-code':'06090','x-vercel-ip-latitude':'37.5638','x-vercel-ip-longitude':'126.9976'});
- const value=activityLocation(header);assert.equal(value.district,'강남구');assert.equal(value.districtSource,'ip-postal');assert(value.locationNote.includes('서로 다릅니다'));assert(value.locationNote.includes('우편번호 강남구'));assert(value.locationNote.includes('대표좌표 중구'));
+ const value=await activityLocation(header);assert.equal(value.district,'강남구');assert.equal(value.districtSource,'ip-postal');assert.equal(value.districtConfidence,'high');assert(value.locationNote.includes('서로 다릅니다'));assert(value.districtEvidence.includes('우편번호 060xx 강남구'));assert(value.districtEvidence.includes('대표좌표 중구'));
  assert.equal('latitude' in value,false);assert.equal('longitude' in value,false);assert.equal('postalCode' in value,false);
- header.set('x-vercel-ip-country','US');assert.equal(activityLocation(header).district,'');
- header.set('x-vercel-ip-country','KR');header.set('x-vercel-ip-country-region','26');header.set('x-vercel-ip-city','Busan');assert.equal(activityLocation(header).district,'');
+ header.set('x-vercel-ip-country','US');assert.equal((await activityLocation(header)).district,'');
+ header.set('x-vercel-ip-country','KR');header.set('x-vercel-ip-country-region','26');header.set('x-vercel-ip-city','Busan');assert.equal((await activityLocation(header)).district,'');
 });
 
 test('published postcode data covers all 25 Seoul districts without filling gaps or overlapping ranges',()=>{
@@ -54,17 +56,56 @@ test('published postcode data covers all 25 Seoul districts without filling gaps
  for(let i=0;i<ranges.length;i++){assert(ranges[i][0]<=ranges[i][1]);if(i)assert(ranges[i-1][1]<ranges[i][0])}
 });
 
-test('IP points are classified against district polygons; missing, invalid and out-of-city points stay unknown',()=>{
- const {seoulDistrictAt,activityLocation}=load('activity-location');
+test('IP points are classified against district polygons; missing, invalid and out-of-city points stay unknown',async()=>{
+ const {seoulDistrictAt,isCityCentrePoint,activityLocation}=load('activity-location');
  assert.equal(seoulDistrictAt(37.5172,127.0473),'강남구');
  assert.equal(seoulDistrictAt(37.4836,127.0327),'서초구');
  assert.equal(seoulDistrictAt(37.5663,126.9019),'마포구');
  assert.equal(seoulDistrictAt(37.5638,126.9976),'중구');
  assert.equal(seoulDistrictAt(35.1796,129.0756),'');assert.equal(seoulDistrictAt(NaN,127),'');
+ assert.equal(isCityCentrePoint(37.5665,126.978),true);assert.equal(isCityCentrePoint(37.5172,127.0473),false);
  const header=new Headers({'x-vercel-ip-country':'KR','x-vercel-ip-country-region':'11','x-vercel-ip-city':'Seoul','x-vercel-ip-latitude':'37.5172','x-vercel-ip-longitude':'127.0473'});
- assert.equal(activityLocation(header).district,'강남구');assert.equal(activityLocation(header).districtSource,'ip-coordinate');
- for(const latitude of ['', '0', 'NaN', '37.5junk']){header.set('x-vercel-ip-latitude',latitude);assert.equal(activityLocation(header).district,'')}
- header.delete('x-vercel-ip-latitude');assert.equal(activityLocation(header).district,'');
+ assert.equal((await activityLocation(header)).district,'강남구');assert.equal((await activityLocation(header)).districtSource,'ip-coordinate');
+ const centre=new Headers({'x-vercel-ip-country':'KR','x-vercel-ip-country-region':'11','x-vercel-ip-city':'Seoul','x-vercel-ip-latitude':'37.5665','x-vercel-ip-longitude':'126.978'});
+ const centreValue=await activityLocation(centre);
+ assert.equal(centreValue.district,'',"a shared city-centre point must never be reported as a district");
+ assert(centreValue.locationNote.includes('서울 중심점'));
+ for(const latitude of ['', '0', 'NaN', '37.5junk']){header.set('x-vercel-ip-latitude',latitude);assert.equal((await activityLocation(header)).district,'')}
+ header.delete('x-vercel-ip-latitude');assert.equal((await activityLocation(header)).district,'');
+});
+
+test('an independent district-aware database supplies the district when Vercel reports only the city',async()=>{
+ const {activityLocation,requestAddress}=load('activity-location');
+ const header=new Headers({'x-vercel-forwarded-for':'121.130.10.20','x-vercel-ip-country':'KR','x-vercel-ip-country-region':'11','x-vercel-ip-city':'Seoul','x-vercel-ip-latitude':'37.5665','x-vercel-ip-longitude':'126.978'});
+ const looked=[];const fakeFetch=async url=>{looked.push(String(url));return {ok:true,json:async()=>({status:'success',country:'South Korea',countryCode:'KR',region:'11',regionName:'Seoul',city:'Nowon-gu',district:'',zip:'018',lat:37.6289,lon:127.0648,isp:'Korea Telecom',org:'Kornet',as:'AS4766 Korea Telecom',mobile:false,proxy:false,hosting:false})}};
+ const api=load('activity-location',{},{},{fetch:fakeFetch});
+ const value=await api.activityLocation(header);
+ assert.equal(requestAddress(header).ip,'121.130.10.20');
+ assert.equal(value.district,'노원구');
+ assert.equal(value.districtSource,'geo-city');
+ assert.equal(value.districtConfidence,'medium');
+ assert(value.districtEvidence.includes('IP DB 도시명 노원구'));
+ assert(value.districtEvidence.includes('IP DB 우편번호 018xx 노원구'));
+ assert(value.districtEvidence.includes('IP DB 대표좌표 노원구'));
+ assert.equal(value.isp,'Korea Telecom');
+ assert.equal(value.ipVersion,'IPv4');
+ assert.equal(looked.length,1);assert(looked[0].includes('ip-api.com/json/121.130.10.20'));
+ await api.activityLocation(header);assert.equal(looked.length,1,'repeated events reuse the cached lookup');
+ const privateHeader=new Headers({'x-forwarded-for':'10.0.0.4'});
+ assert.equal(requestAddress(privateHeader).public,false);
+ assert.equal((await api.activityLocation(privateHeader)).isp,'');
+});
+
+test('a failing or disabled district lookup still records the visitor',async()=>{
+ const header=new Headers({'x-vercel-forwarded-for':'121.130.10.20','x-vercel-ip-country':'KR','x-vercel-ip-country-region':'11','x-vercel-ip-city':'Seoul'});
+ const off=load('activity-location',{},{LEGAL_IP_LOOKUP:'off'});
+ const offValue=await off.activityLocation(header);
+ assert.equal(offValue.district,'');assert.equal(offValue.isp,'');assert.equal(offValue.location,'서울특별시');
+ const broken=load('activity-location',{},{},{fetch:async()=>{throw new Error('offline')}});
+ const brokenValue=await broken.activityLocation(header);
+ assert.equal(brokenValue.ip,'121.130.10.20');assert.equal(brokenValue.district,'');
+ const erroring=load('activity-location',{},{},{fetch:async()=>({ok:false,json:async()=>null})});
+ assert.equal((await erroring.activityLocation(header)).district,'');
 });
 function fakeStore(){
  const entries=new Map();let revision=0;

@@ -4,7 +4,50 @@
 
 Source: JUSO administrative district boundaries (2015). Published by Lucy Park and contributors under Apache 2.0; see `LICENSE-seoul-districts.txt`. The geometry is used only to classify an IP provider's approximate point. It does not verify a visitor's physical location. Boundary simplification can affect points near district borders.
 
-No coordinates, IP addresses or queries are sent to a geocoding service. Only the derived district and its estimation source are stored with activity records.
+No coordinates, IP addresses or queries are stored with activity records. Only the derived district, its estimation source and the estimation confidence are stored.
+
+## District estimation pipeline
+
+Vercel's GeoIP headers alone cannot name a Seoul district: for almost every Korean
+address `x-vercel-ip-city` is just `Seoul`, `x-vercel-ip-postal-code` is usually
+empty, and `x-vercel-ip-latitude`/`x-vercel-ip-longitude` is a single shared city
+centre point (37.5665, 126.9780) that falls inside 중구 for every visitor. Reporting
+that point as a district is why every Seoul record used to read `서울특별시 중구`.
+
+`src/lib/activity-location.ts` therefore collects several independent signals and
+only reports a district that they support:
+
+| Signal | Source | Weight |
+| --- | --- | --- |
+| Full five-digit postcode | `x-vercel-ip-postal-code` or the IP database | 6 |
+| District naming city (`Nowon-gu`, `노원구`) | `x-vercel-ip-city` or the IP database | 4 |
+| Coarse three-digit postcode prefix (`018xx`) | IP database `zip` | 3 |
+| Approximate point inside a district polygon | either provider | 1 |
+
+Rules:
+
+* A point within 1.2 km of the Seoul centre is treated as "no information" and never
+  produces a district.
+* Evidence from both the Vercel headers and the IP database must agree before a
+  district is reported with `정확도 높음`. A single provider is capped at `정확도 보통`,
+  a bare point at `정확도 낮음`.
+* Conflicting district evidence is never silently averaged: the strongest evidence is
+  stored and the disagreement is written to `locationNote`.
+* When nothing is known the record keeps `서울특별시` and says so, instead of guessing.
+
+### Third-party IP database
+
+When Vercel's headers do not identify a district the server asks
+[ip-api.com](https://ip-api.com/docs/api:json) for that one visitor IP
+(`city`, `zip`, coordinates, ISP, proxy/hosting flags) and maps the answer locally.
+The visitor IP is therefore disclosed to that service; no query text, cookie or
+coordinate is ever sent. Set `LEGAL_IP_LOOKUP=off` to keep lookups inside Vercel
+only. Lookups are cached per IP for six hours, are skipped for private and
+loopback addresses, time out after 2.5 seconds, and never block an activity record.
+ip-api.com is free for non-commercial use only; review its terms before commercial use.
+
+The response also records `isp`, `asn`, `networkType` (일반/모바일/데이터센터·VPN) and
+`networkRisk` so a proxied or datacenter IP can be recognised instead of trusted.
 
 ## Seoul postcodes
 
