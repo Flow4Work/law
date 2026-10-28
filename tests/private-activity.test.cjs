@@ -36,19 +36,43 @@ test('IP geolocation uses supplied city data and never invents a Seoul district'
  assert.equal((await activityLocation(new Headers())).location,'지역 확인 불가');
 });
 
-test('Seoul postcode evidence wins over approximate IP coordinates and conflicting evidence is reported',async()=>{
+test('Seoul postcode evidence wins over approximate IP coordinates and is confirmed against a district database',async()=>{
  const {activityLocation,seoulPostalDistrict,seoulPostalPrefixDistrict}=load('activity-location');
  assert.equal(seoulPostalDistrict('06090'),'강남구');assert.equal(seoulPostalDistrict('04524'),'중구');
  for(const value of ['6090','99999','00000','06400','04524evil',''])assert.equal(seoulPostalDistrict(value),'');
  assert.equal(seoulPostalPrefixDistrict('018'),'노원구');assert.equal(seoulPostalPrefixDistrict('055'),'송파구');assert.equal(seoulPostalPrefixDistrict('043'),'용산구');
  for(const value of ['18','1800','1','','88x'])assert.equal(seoulPostalPrefixDistrict(value),'');
  const header=new Headers({'x-vercel-forwarded-for':'203.0.113.1','x-vercel-ip-country':'KR','x-vercel-ip-country-region':'11','x-vercel-ip-city':'Seoul','x-vercel-ip-postal-code':'06090','x-vercel-ip-latitude':'37.5638','x-vercel-ip-longitude':'126.9976'});
- const value=await activityLocation(header);assert.equal(value.district,'강남구');assert.equal(value.districtSource,'ip-postal');assert.equal(value.districtConfidence,'high');assert(value.locationNote.includes('서로 다릅니다'));assert(value.districtEvidence.includes('우편번호 060xx 강남구'));assert(value.districtEvidence.includes('대표좌표 중구'));
- assert.equal('latitude' in value,false);assert.equal('longitude' in value,false);assert.equal('postalCode' in value,false);
+ const alone=await activityLocation(header);
+ assert.equal(alone.district,'강남구');assert.equal(alone.districtSource,'ip-postal');assert.equal(alone.districtConfidence,'medium');
+ assert(alone.districtEvidence.includes('우편번호 060xx 강남구'));assert(alone.districtEvidence.includes('대표좌표 중구'));
+ assert.equal('latitude' in alone,false);assert.equal('longitude' in alone,false);assert.equal('postalCode' in alone,false);
+ const agreeing=async url=>({ok:true,json:async()=>({status:'success',countryCode:'KR',region:'11',regionName:'Seoul',city:'Gangnam-gu',zip:'06090',lat:37.5172,lon:127.0473,isp:'Korea Telecom',org:'Kornet',as:'AS4766',mobile:false,proxy:false,hosting:false})});
+ const confirmed=await load('activity-location',{},{},{fetch:agreeing}).activityLocation(header);
+ assert.equal(confirmed.district,'강남구');assert.equal(confirmed.districtConfidence,'high');
  header.set('x-vercel-ip-country','US');assert.equal((await activityLocation(header)).district,'');
  header.set('x-vercel-ip-country','KR');header.set('x-vercel-ip-country-region','26');header.set('x-vercel-ip-city','Busan');assert.equal((await activityLocation(header)).district,'');
 });
 
+test('a city-centre postcode never overrules a district-aware database',async()=>{
+ const header=new Headers({'x-vercel-forwarded-for':'112.187.136.60','x-vercel-ip-country':'KR','x-vercel-ip-country-region':'11','x-vercel-ip-city':'Seoul','x-vercel-ip-postal-code':'03141','x-vercel-ip-latitude':'37.5665','x-vercel-ip-longitude':'126.9780'});
+ const api=load('activity-location',{},{},{fetch:async()=>({ok:true,json:async()=>({status:'success',countryCode:'KR',region:'11',regionName:'Seoul',city:'Seongdong-gu',zip:'047',lat:37.5511,lon:127.0387,isp:'Korea Telecom',org:'Kornet',as:'AS4766',mobile:false,proxy:false,hosting:false})})});
+ const value=await api.activityLocation(header);
+ assert.equal(value.district,'성동구',"Vercel's Seoul registration postcode must not beat three agreeing database signals");
+ assert.equal(value.districtConfidence,'medium');
+ assert(value.locationNote.includes('중심 기본값'),value.locationNote);
+});
+
+test('a browser-verified district always wins over every IP signal',async()=>{
+ const {activityLocation}=load('activity-location');
+ const header=new Headers({'x-vercel-forwarded-for':'112.187.136.60','x-vercel-ip-country':'KR','x-vercel-ip-country-region':'11','x-vercel-ip-city':'Seoul','x-vercel-ip-postal-code':'03141'});
+ const value=await activityLocation(header,'광진구');
+ assert.equal(value.location,'서울특별시 광진구');
+ assert.equal(value.districtSource,'verified');
+ assert.equal(value.districtConfidence,'high');
+ assert(value.districtEvidence.includes('브라우저 위치 확인'));
+ assert.equal(value.locationNote,'');
+});
 test('published postcode data covers all 25 Seoul districts without filling gaps or overlapping ranges',()=>{
  const ranges=require('../src/geo/seoul-postal-districts.json');
  assert.equal(new Set(ranges.map(row=>row[2])).size,25);

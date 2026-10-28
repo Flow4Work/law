@@ -49,6 +49,19 @@ ip-api.com is free for non-commercial use only; review its terms before commerci
 The response also records `isp`, `asn`, `networkType` (일반/모바일/데이터센터·VPN) and
 `networkRisk` so a proxied or datacenter IP can be recognised instead of trusted.
 
+### Browser-verified district
+
+Free IP databases disagree with each other by several kilometres inside Seoul, and
+Vercel's Korean postcode is usually the capital's registration postcode rather than
+the visitor's own. The only exact source is the visitor's device.
+
+The private console therefore offers **내 위치로 구 확인**. The browser reports its
+position once, the server converts it to a district with the same boundary polygons
+and keeps only the district name — the coordinates are never written anywhere — under
+`activity/verified/<hashed ip>.enc`. Every later activity from that network address
+is recorded as `verified` with `정확도 높음`, and the console shows the evidence as
+`브라우저 위치 확인`.
+
 ## Seoul postcodes
 
 `seoul-postal-districts.json` is derived from Korea Post's [regional postcode address database](https://www.epost.go.kr/search/zipcode/areacdAddressDown.jsp), [download](https://www.epost.go.kr/search/areacd/zipcode_DB.zip), published 2026-10-13 (addresses as of 2026-10-08), `서울특별시.txt`.

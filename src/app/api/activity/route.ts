@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {ACTIVITY_LABELS,type ActivityAction} from '@/lib/activity-types';
-import {activityLocation} from '@/lib/activity-location';
-import {appendActivity} from '@/lib/activity-store';
+import {activityLocation,requestAddress} from '@/lib/activity-location';
+import {appendActivity,readVerifiedDistrict} from '@/lib/activity-store';
 import {modelRequestAllowed} from '@/lib/model-request-origin';
 export const runtime='nodejs';
 export const maxDuration=30;
@@ -9,7 +9,8 @@ const recent=new Map<string,{start:number;count:number}>();
 export async function POST(request:Request){
  if(!modelRequestAllowed(request))return new Response(null,{status:403});
  if(!process.env.LEGAL_ADMIN_PATH||!process.env.LEGAL_CONNECTION_SECRET)return new Response(null,{status:204});
- const location=await activityLocation(request.headers),now=Date.now();
+ const verified=await readVerifiedDistrict(requestAddress(request.headers).ip);
+ const location=await activityLocation(request.headers,verified),now=Date.now();
  if(recent.size>1000)for(const [key,value] of recent)if(now-value.start>60000)recent.delete(key);
  const limit=recent.get(location.ip);if(limit&&now-limit.start<60000){if(limit.count>=60)return new Response(null,{status:429});limit.count++}else recent.set(location.ip,{start:now,count:1});
  let body;try{const text=await request.text();if(text.length>2000)return new Response(null,{status:413});body=JSON.parse(text)}catch{return new Response(null,{status:400})}

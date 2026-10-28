@@ -47,8 +47,29 @@ export async function readActivityReport(days:number):Promise<ActivityReport>{
  const all=Array.from(new Map(journals.flatMap(value=>value.events||[]).map(event=>[event.id,event])).values()).sort((a,b)=>b.at.localeCompare(a.at));
  return {events:all.slice(0,1000),total:all.length,visits:all.filter(event=>event.action==='visit').length,queries:all.filter(event=>event.action==='query').length,uniqueIps:new Set(all.map(event=>event.ip).filter(ip=>ip!=='확인 불가')).size,days:count,generatedAt:new Date().toISOString(),limited:journals.some(value=>value.limited)||all.length>1000||overflowLimited||overflow.length>1000};
 }
-/** Five login attempts per IP per ten minutes; storage claims remain valid across serverless instances. */
-export async function claimAdminAttempt(ip:string){
+/** Remember, per network address, the district a visitor confirmed from their own browser. */
+export async function readVerifiedDistrict(ip:string):Promise<string>{
+ const key='activity/verified/'+privateIpKey(ip)+'.enc';
+ try{
+  if(cloud()){
+   const result=await get(key,{access:'private',useCache:false});
+   if(!result||result.statusCode!==200)return '';
+   const value=decryptActivity<{district:string}>(await new Response(result.stream).text());
+   return typeof value?.district==='string'?value.district.slice(0,10):'';
+  }
+  const value=decryptActivity<{district:string}>(await readFile(path.join(root,'verified',privateIpKey(ip)+'.enc'),'utf8'));
+  return typeof value?.district==='string'?value.district.slice(0,10):'';
+ }catch{return ''}
+}
+export async function saveVerifiedDistrict(ip:string,district:string){
+ if(!district)return;
+ const key='activity/verified/'+privateIpKey(ip)+'.enc',body=encryptActivity({district,at:new Date().toISOString()});
+ if(cloud()){await put(key,body,{access:'private',addRandomSuffix:false,allowOverwrite:true,contentType:'application/octet-stream'});return}
+ const dir=path.join(root,'verified');await mkdir(dir,{recursive:true});
+ const temporary=path.join(dir,privateIpKey(ip)+'-'+randomUUID()+'.tmp');
+ await writeFile(temporary,body,{mode:0o600});await rename(temporary,path.join(root,'verified',privateIpKey(ip)+'.enc'));
+}
+/** Five login attempts per IP per ten minutes; storage claims remain valid across serverless instances. */export async function claimAdminAttempt(ip:string){
  const bucket=Math.floor(Date.now()/600000),fingerprint=privateIpKey(ip);
  for(let slot=0;slot<5;slot++){
   const key=`activity/access/${bucket}/${fingerprint}-${slot}`;
