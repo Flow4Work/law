@@ -14,6 +14,9 @@ const hiddenFile=path.join(dataDir,'hidden-connections.json');
 const hiddenModelsFile=path.join(dataDir,'hidden-models.json');
 const overridesFile=path.join(dataDir,'model-overrides.json');
 const rootId=(id:string)=>id.replace(/:(?:high|low|flash)$/,'');
+export const modelConnectionsReadOnly=()=>process.env.VERCEL==='1';
+export const hostedConnectionsMessage='공개 사이트의 AI 연결은 운영자가 관리해요. 등록된 모델을 선택해주세요.';
+function requireWritableConnections(){if(modelConnectionsReadOnly())throw new Error(hostedConnectionsMessage)}
 async function hiddenConnections():Promise<string[]>{try{const data=JSON.parse(await readFile(hiddenFile,'utf8'));return Array.isArray(data)?data.filter((id:unknown):id is string=>typeof id==='string'):[]}catch{return []}}
 async function hiddenModels():Promise<string[]>{try{const data=JSON.parse(await readFile(hiddenModelsFile,'utf8'));return Array.isArray(data)?data.filter((id:unknown):id is string=>typeof id==='string'):[]}catch{return []}}
 const workspace=()=>process.env.LEGAL_MODEL_WORKSPACE||path.join(process.env.USERPROFILE||'C:\\Users\\동호','Projects','ai-product-workspace');
@@ -38,26 +41,41 @@ function variants(item:{id:string;name:string;provider:string;model:string;baseU
 }
 async function configuredModels():Promise<ProviderConfig[]>{
  const configs:ProviderConfig[]=[];
+ if(process.env.LEGAL_MODEL_CONNECTIONS){
+  try{
+   const entries=JSON.parse(process.env.LEGAL_MODEL_CONNECTIONS);
+   if(!Array.isArray(entries))throw new Error('Expected a connection list');
+   for(const entry of entries){
+    if(!entry||typeof entry!=='object'||!['id','name','provider','model','baseUrl','key'].every(field=>typeof entry[field]==='string')||!entry.key||entry.provider==='local')continue;
+    const baseUrl=validBaseUrl(entry.baseUrl);
+    if(modelConnectionsReadOnly()&&new URL(baseUrl).protocol!=='https:')continue;
+    configs.push(...variants({id:entry.id,name:entry.name,provider:entry.provider,model:entry.model,baseUrl,key:entry.key,source:'운영자가 등록한 연결',isDefault:entry.isDefault===true,effort:['low','high','max'].includes(entry.effort)?entry.effort:undefined}));
+   }
+  }catch{console.warn('[legal-model-config] LEGAL_MODEL_CONNECTIONS 설정 형식을 확인해주세요.')}
+ }
+ if(!modelConnectionsReadOnly()){
  try{
   const raw=JSON.parse(await readFile(path.join(workspace(),'data','workspace.json'),'utf8'));
   const secret=Buffer.from((await readFile(path.join(workspace(),'data','.secret'),'utf8')).trim(),'hex');
   for(const m of raw.models||[]){if(!m.encryptedKey)continue;try{configs.push(...variants({id:'workspace:'+m.id,name:m.name||m.model,provider:m.provider,model:m.model,baseUrl:validBaseUrl(m.baseUrl),key:decrypt(m.encryptedKey,secret),source:'3400번에 저장된 연결',isDefault:Boolean(m.isDefault)}))}catch{}}
  }catch{}
+ }
  const envGlm=process.env.GLM_API_KEY||process.env.ZAI_API_KEY;
  if(envGlm&&!configs.some(m=>m.provider==='glm'))configs.push(...variants({id:'env:glm',name:'GLM 5.3',provider:'glm',model:'glm-5.3',baseUrl:process.env.GLM_BASE_URL||'https://api.z.ai/api/paas/v4',key:envGlm,source:'환경 변수',isDefault:true}));
  if(process.env.OPENROUTER_API_KEY)configs.push({id:'env:openrouter',name:'OpenRouter · '+(process.env.OPENROUTER_MODEL||'모델 선택'),provider:'openrouter',model:process.env.OPENROUTER_MODEL||'openrouter/auto',baseUrl:'https://openrouter.ai/api/v1',key:process.env.OPENROUTER_API_KEY,source:'환경 변수',available:true});
- try{const secret=Buffer.from((await readFile(secretFile,'utf8')).trim(),'hex');for(const m of await loadSaved())configs.push(...variants({...m,key:m.encryptedKey?decrypt(m.encryptedKey,secret):'',source:'이 서비스에 저장한 연결'}))}catch{}
+ if(!modelConnectionsReadOnly())try{const secret=Buffer.from((await readFile(secretFile,'utf8')).trim(),'hex');for(const m of await loadSaved())configs.push(...variants({...m,key:m.encryptedKey?decrypt(m.encryptedKey,secret):'',source:'이 서비스에 저장한 연결'}))}catch{}
  return configs;
 }
 let localCache:{at:number;models:ProviderConfig[]}|undefined;
 async function localModels(refresh=false):Promise<ProviderConfig[]>{
+ if(modelConnectionsReadOnly())return [];
  if(!refresh&&localCache&&Date.now()-localCache.at<30000)return localCache.models;
  const targets=[{name:'Ollama',base:'http://127.0.0.1:11434/v1',url:'http://127.0.0.1:11434/api/tags',ollama:true},{name:'LM Studio',base:'http://127.0.0.1:1234/v1',url:'http://127.0.0.1:1234/v1/models',ollama:false}];
  const results=await Promise.all(targets.map(async target=>{try{const response=await fetch(target.url,{signal:AbortSignal.timeout(1500),cache:'no-store'});if(!response.ok)return [];const data=await response.json();const models=target.ollama?data.models:data.data;return (Array.isArray(models)?models:[]).slice(0,50).flatMap((m:any)=>{const model=target.ollama?m.name:m.id;return typeof model==='string'?[{id:'local:'+target.name+':'+model,name:target.name+' · '+model,model,provider:'local',baseUrl:target.base,key:'',source:'실행 중인 로컬 서버',available:true}]:[]})}catch{return []}}));
  const models=results.flat();localCache={at:Date.now(),models};return models;
 }
 export async function allProviders(refresh=false){
- const [rawConfigured,local,overrides]=await Promise.all([configuredModels(),localModels(refresh),loadOverrides()]);
+ const [rawConfigured,local,overrides]=await Promise.all([configuredModels(),localModels(refresh),modelConnectionsReadOnly()?Promise.resolve({} as Record<string,{model:string;name:string}>):loadOverrides()]);
  const configured=rawConfigured.flatMap((entry,index)=>{
   const root=rootId(entry.id),override=overrides[root];
   if(!override)return [entry];
@@ -70,7 +88,7 @@ export async function allProviders(refresh=false){
   catch{return {...model,available:false}}
  }));
  const discovered=local.filter(model=>!savedLocal.some(saved=>saved.baseUrl===model.baseUrl&&saved.model===model.model));
- const [hiddenConnectionsList,hiddenModelsList]=await Promise.all([hiddenConnections(),hiddenModels()]);
+ const [hiddenConnectionsList,hiddenModelsList]=modelConnectionsReadOnly()?[[],[]]:await Promise.all([hiddenConnections(),hiddenModels()]);
  const hidden=new Set(hiddenConnectionsList),hiddenModelIds=new Set(hiddenModelsList);
  return [...configured.filter(model=>model.provider!=='local'),...reachableSavedLocal,...discovered]
   .filter(model=>!hidden.has(rootId(model.id))&&!hiddenModelIds.has(model.id));
@@ -87,7 +105,7 @@ export async function getModelInventory(refresh=false):Promise<ModelInventory>{
  const configs=await allProviders(refresh);
  const models=configs.map(({key,baseUrl,...safe})=>safe);
  const defaultId=chooseFast(configs)?.id||'';
- return {models,defaultId,lawApiConnected:Boolean(process.env.LAW_API_OC),connections:[
+ return {models,defaultId,readOnly:modelConnectionsReadOnly(),lawApiConnected:Boolean(process.env.LAW_API_OC),connections:[
   {provider:'glm',name:'GLM / Z.AI',connected:models.some(m=>m.provider==='glm'),message:models.some(m=>m.provider==='glm')?'저장된 API 키를 사용해요.':'API 키를 연결해주세요.'},
   {provider:'openrouter',name:'OpenRouter',connected:models.some(m=>m.provider==='openrouter'),message:models.some(m=>m.provider==='openrouter')?'등록한 모델을 선택할 수 있어요.':'등록된 키가 없어요. 연결하면 모델 목록을 가져와요.'},
   {provider:'bai',name:'B.AI',connected:models.some(m=>m.provider==='bai'),message:models.some(m=>m.provider==='bai')?'등록한 모델을 선택할 수 있어요.':'API 키를 연결해주세요.'},
@@ -100,6 +118,7 @@ export async function findConfiguredProvider(id:string):Promise<ProviderConfig>{
 export async function resolveProvider(id?:string):Promise<ProviderConfig>{const configs=await allProviders();const cfg=id?configs.find(m=>m.id===id):chooseFast(configs);if(!cfg||!cfg.available)throw new Error('선택한 모델의 연결을 확인해주세요.');return cfg}
 let saveQueue=Promise.resolve();
 export async function saveConnection(raw:any){
+ requireWritableConnections();
  const existing=typeof raw.connectionId==='string'&&raw.connectionId?await findConfiguredProvider(raw.connectionId):null;
  const provider=existing?.provider||(['glm','openrouter','opencode','gemini','bai','local','custom'].includes(raw.provider)?raw.provider:'custom');
  const key=existing?.key||(typeof raw.key==='string'?raw.key.trim():'');
@@ -139,6 +158,7 @@ export async function saveConnection(raw:any){
 
 /** Remove a single model from this app. Deleting an imported variant never mutates its source connection. */
 export async function deleteModel(modelId:string){
+ requireWritableConnections();
  if(!modelId||modelId.length>250)throw new Error('삭제할 모델을 선택해주세요.');
  const configured=await allProviders();
  const model=configured.find(item=>item.id===modelId);
@@ -159,6 +179,7 @@ export async function deleteModel(modelId:string){
 }
 
 export async function deleteConnection(id:string){
+ requireWritableConnections();
  const root=rootId(id);
  if(!/^(saved|workspace|env|local):/.test(root))throw new Error('삭제할 연결을 찾지 못했습니다.');
  const task=saveQueue.then(async()=>{

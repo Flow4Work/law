@@ -288,6 +288,7 @@ dialog{color:var(--text)}
 }
 
 .model-picker-trigger{min-width:0;max-width:none;width:51px;justify-content:center;gap:5px;padding:6px 8px;border-color:transparent;background:transparent}
+.model-picker-label{font-size:13px;font-weight:600;line-height:1;letter-spacing:.02em}
 .model-picker-trigger:hover{background:var(--soft)}
 .model-picker-trigger>svg:last-child{margin-left:0;width:12px}
 @media(max-width:860px){.model-picker-trigger{flex:0 0 51px!important;width:51px!important;max-width:51px!important}}

@@ -7,7 +7,7 @@ import {fastMapPrompt} from '@/lib/fast-map-prompt';
 import {getProcedureGuidance} from '@/lib/legal-guidance';
 import type {LegalCase} from '@/lib/types';
 export const runtime='nodejs';
-export const maxDuration=600;
+export const maxDuration=300;
 function preliminaryLawQueries(input:string){
  const queries:string[]=[];
  if(/보증금|임대차|전세|월세|집주인/.test(input))queries.push('주택임대차보호법','민법 임대차 보증금 반환');
@@ -23,7 +23,7 @@ export async function POST(request:Request){
  const message=text(body.message,7000);if(!message)return NextResponse.json({error:'상황을 입력해 주세요.'},{status:400});
  const previous=body.previous&&typeof body.previous==='object'?body.previous as LegalCase:undefined;
  const controller=new AbortController();
- const signal=AbortSignal.any([request.signal,controller.signal]);
+ const signal=AbortSignal.any([request.signal,controller.signal,AbortSignal.timeout(280000)]);
  const run=async(notify:(event:AIProgress)=>void)=>withAIContext({modelId:typeof body.modelId==='string'?body.modelId:undefined,signal,onProgress:notify},async()=>{
   notify({phase:'analyzing',message:'이야기를 읽고 가능한 방법과 갈라지는 상황을 정리하고 있어요.'});
   const history=(previous?.messages||[]).filter(m=>!m.error).slice(-14).map(m=>({role:m.role,content:m.content}));
@@ -74,7 +74,7 @@ export async function POST(request:Request){
   const encoder=new TextEncoder();
   const stream=new ReadableStream({start(output){
    let closed=false;
-   const send=(event:unknown)=>{if(!closed&&!signal.aborted)try{output.enqueue(encoder.encode('data: '+JSON.stringify(event)+'\n\n'))}catch{closed=true}};
+   const send=(event:unknown)=>{if(!closed&&!request.signal.aborted&&!controller.signal.aborted)try{output.enqueue(encoder.encode('data: '+JSON.stringify(event)+'\n\n'))}catch{closed=true}};
    const heartbeat=setInterval(()=>{if(!closed&&!signal.aborted)try{output.enqueue(encoder.encode(': keepalive\n\n'))}catch{closed=true}},15000);
    run(event=>send({type:'status',...event})).then(data=>send({type:'result',...data})).catch(error=>send({type:'error',error:error instanceof Error?error.message:'정리하는 중 문제가 생겼어요.'})).finally(()=>{clearInterval(heartbeat);if(!closed){closed=true;try{output.close()}catch{}}});
   },cancel(){controller.abort()}});

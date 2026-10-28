@@ -4,6 +4,7 @@ import {normalizeIntake,type IntakePlan,type IntakeAnswer,type IntakeQuestion} f
 import {INTAKE_INTERVIEW_PROMPT,legalIntakeContext} from '@/lib/intake-strategy';
 
 export const runtime='nodejs';
+export const maxDuration=30;
 const cap=(v:unknown,length=300)=>typeof v==='string'?v.trim().slice(0,length):'';
 function readPlan(value:unknown,original:string):IntakePlan|undefined{
  if(!value||typeof value!=='object')return;

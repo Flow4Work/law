@@ -1,6 +1,6 @@
 'use client';
 
-import {Check,ChevronDown,SlidersHorizontal,Search,Plus,BrainCircuit} from 'lucide-react';
+import {Check,ChevronDown,SlidersHorizontal,Search,Plus} from 'lucide-react';
 import {useEffect,useId,useLayoutEffect,useRef,useState} from 'react';
 import type {ModelInventory} from '@/lib/model-types';
 import {providerName} from '@/lib/model-selection';
@@ -85,8 +85,8 @@ export function ModelPicker({inventory,value,disabled=false,onChange,onManage}:P
     options[next].focus();
   }}>
     <button ref={trigger} className="model-picker-trigger" type="button" aria-label={'답변 모델 선택'+(current?.name?': '+current.name:'')} title={current?.name||'답변 모델 선택'} aria-haspopup="dialog" aria-controls={id} aria-expanded={open} disabled={disabled} onClick={()=>setOpen(value=>!value)}>
-      <BrainCircuit size={19} aria-hidden="true"/>
-      <ChevronDown className={open?'is-open':''} size={17}/>
+      <span className="model-picker-label" aria-hidden="true">AI</span>
+      <ChevronDown className={open?'is-open':''} size={12} aria-hidden="true"/>
     </button>
     <button className="model-settings-trigger" type="button" aria-label="모델 연결과 관리" title="모델 연결과 관리" disabled={disabled} onClick={onManage}><SlidersHorizontal size={17}/></button>
     {open&&<div ref={popover} popover="manual" id={id} className="model-picker-popover" role="dialog" aria-label="답변 모델 선택 메뉴">

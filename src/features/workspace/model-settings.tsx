@@ -47,7 +47,8 @@ function Pages({page,total,onPage}:{page:number;total:number;onPage:(n:number)=>
 export function ModelSettings({inventory,currentModelId,initialProvider,onClose,onChanged}:Props){
  const dialog=useRef<HTMLDialogElement>(null);
  const modelListRef=useRef<HTMLDivElement>(null);
- const [tab,setTab]=useState<Tab>(inventory?.models.length?'select':'add');
+ const readOnly=inventory?.readOnly===true;
+ const [tab,setTab]=useState<Tab>(inventory?.readOnly||inventory?.models.length?'select':'add');
  const [mode,setMode]=useState<Mode>('new');
  const [provider,setProvider]=useState(initialProvider||'openrouter');
  const [baseUrl,setBaseUrl]=useState(getUrl(initialProvider||'openrouter'));
@@ -95,6 +96,7 @@ export function ModelSettings({inventory,currentModelId,initialProvider,onClose,
  const showingManaged=manageConnections;
 
  useEffect(()=>{const target=dialog.current;target?.showModal();return()=>target?.close()},[]);
+ useEffect(()=>{if(readOnly)setTab('select')},[readOnly]);
  useEffect(()=>{setCandidate(currentModelId||'')},[currentModelId]);
  useEffect(()=>{setCatalogPage(v=>Math.min(v,catalogPageCount-1))},[catalogPageCount]);
  useEffect(()=>{setConnectionPage(v=>Math.min(v,connectionPageCount-1))},[connectionPageCount]);
@@ -218,14 +220,15 @@ export function ModelSettings({inventory,currentModelId,initialProvider,onClose,
  };
  return <dialog ref={dialog} className="model-dialog lm-dialog" aria-labelledby="lm-title" onCancel={e=>{e.preventDefault();onClose()}} onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
   <div className="lm-header">
-   <div className="lm-heading"><span className="lm-mark"><Layers3 size={20}/></span><div><h2 id="lm-title">AI 모델 설정</h2><p>모델 선택, 변경, API 연결을 관리합니다.</p></div></div>
+   <div className="lm-heading"><span className="lm-mark"><Layers3 size={20}/></span><div><h2 id="lm-title">AI 모델 설정</h2><p>{readOnly?'등록된 모델 중 사용할 모델을 선택하세요.':'모델 선택, 변경, API 연결을 관리합니다.'}</p></div></div>
    <button type="button" className="lm-close" aria-label="설정 닫기" onClick={onClose}><X size={19}/></button>
   </div>
   <div className="lm-tabs" role="tablist" aria-label="모델 설정 메뉴" onKeyDown={arrowKeys}>
    <button type="button" id="lm-tab-select" role="tab" aria-controls="lm-panel-select" aria-selected={tab==='select'} tabIndex={tab==='select'?0:-1} disabled={action!==null} onClick={()=>swapTab('select')}>모델 선택 <span>{models.length}</span></button>
-   <button type="button" id="lm-tab-manage" role="tab" aria-controls="lm-panel-manage" aria-selected={tab!=='select'} tabIndex={tab!=='select'?0:-1} disabled={action!==null} onClick={()=>swapTab('manage')}>API 연결 <span>{manageConnections.length}</span></button>
+   {!readOnly&&<button type="button" id="lm-tab-manage" role="tab" aria-controls="lm-panel-manage" aria-selected={tab!=='select'} tabIndex={tab!=='select'?0:-1} disabled={action!==null} onClick={()=>swapTab('manage')}>API 연결 <span>{manageConnections.length}</span></button>}
   </div>
   <div className="lm-body">
+   {readOnly&&<p className="lm-notification">AI 연결은 운영자가 관리해요. 모델 선택은 이 브라우저에만 적용돼요.</p>}
    {error&&<p role="alert" className="lm-notification lm-error">{error}</p>}
    {notice&&<p role="status" className="lm-notification"><CircleCheck size={15}/>{notice}</p>}
    {tab==='select'?<section className="lm-choose" id="lm-panel-select" role="tabpanel" aria-labelledby="lm-tab-select">
@@ -244,7 +247,7 @@ export function ModelSettings({inventory,currentModelId,initialProvider,onClose,
        {m.id===current?.id&&<span className="lm-in-use">사용 중</span>}
       </button>
       <button type="button" className="lm-test" disabled={!m.available||action!==null||testing!==null} aria-label={m.name+' 응답 확인'} title="모델 응답 확인" onClick={()=>test(m.id)}>{testing===m.id?<LoaderCircle className="spin" size={15}/>:<RefreshCw size={15}/>}</button>
-      <button type="button" className="lm-model-remove" disabled={action!==null} aria-label={m.name+' 모델 삭제'} title="모델 삭제" onClick={()=>{setModelDeletePending(m.id);setError('');setNotice('')}}><Trash2 size={15}/></button>
+      {!readOnly&&<button type="button" className="lm-model-remove" disabled={action!==null} aria-label={m.name+' 모델 삭제'} title="모델 삭제" onClick={()=>{setModelDeletePending(m.id);setError('');setNotice('')}}><Trash2 size={15}/></button>}
       {testResults[m.id]&&<div className={'lm-test-result '+(testResults[m.id].startsWith('짧은 API 응답 정상')?'lm-test-ok':'')} role="status">{testResults[m.id]}</div>}
       {!m.available&&m.reason&&<div className="lm-test-result" role="status">{m.reason}</div>}
       {modelDeletePending===m.id&&<div className="lm-model-delete-confirm" role="group" aria-label={m.name+' 삭제 확인'}>
@@ -253,9 +256,9 @@ export function ModelSettings({inventory,currentModelId,initialProvider,onClose,
        <button type="button" className="lm-danger-confirm" disabled={action!==null} onClick={()=>removeModel(m)}>{action==='delete'?'삭제 중':'삭제 확인'}</button>
       </div>}
      </article>)}
-    </div>:<div className="lm-blank">{models.length?'검색 결과가 없습니다.':'연결된 모델이 없습니다. 모델을 먼저 추가해주세요.'}</div>}
+    </div>:<div className="lm-blank">{models.length?'검색 결과가 없습니다.':readOnly?'아직 연결된 모델이 없어요. 운영자가 AI 연결을 준비하고 있어요.':'연결된 모델이 없습니다. 모델을 먼저 추가해주세요.'}</div>}
     <div className="lm-footer lm-select-footer"><span className="lm-list-count">전체 {filteredModels.length}개 모델</span>
-     <div className="lm-footer-actions"><button type="button" className="lm-outline-btn" onClick={()=>{swapMode('new');swapTab('add')}}><Plus size={15}/> 모델 추가</button>
+     <div className="lm-footer-actions">{!readOnly&&<button type="button" className="lm-outline-btn" onClick={()=>{swapMode('new');swapTab('add')}}><Plus size={15}/> 모델 추가</button>}
       <button type="button" className="lm-primary" disabled={!candidate||!models.some(m=>m.id===candidate&&m.available)||candidate===currentModelId||action!==null} onClick={confirmSelection}><Check size={16}/> 선택 확인</button></div>
     </div>
    </section>:tab==='manage'?<section className="lm-manage" id="lm-panel-manage" role="tabpanel" aria-labelledby="lm-tab-manage">

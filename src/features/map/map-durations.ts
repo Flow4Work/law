@@ -61,7 +61,7 @@ const SETTLEMENT_REPLY=estimate('첫 회신 목표 약 3~7일','합의 제안 �
 
 /** 수치화할 수 없는 기간에도 현재 절차에 맞는 사유를 표시합니다. */
 function contextualPeriod(node:RoadmapNode,parent?:RoadmapNode):CardPeriod{
- const text=[node.title,node.description,...node.conditions].join(' ');
+ const text=[node.title,node.description,...(node.conditions||[])].join(' ');
  const variable=[...(node.scenario?.timing||[]),...(parent?.scenario?.timing||[])].find(item=>item.kind==='variable'&&item.label.trim()&&!/미확인|근거|확인 필요|상황에 따라 다름|사건별/.test(item.label));
  if(/합의|협의|협상|화해/.test(text))return status('합의 결과에 따라 달라짐','당사자의 제안·답변·조건 조율에 따라 일정이 달라집니다. 합의하면 서명 시점과 약속한 이행일을 구분해 확인합니다.');
  if(/지급|입금|변제|상환|돈을 받/.test(text))return status('약속한 지급일에 따라 달라짐','실제 입금일은 상대방의 이행 여부와 약정한 지급일에 따릅니다. 협의나 판결이 끝났다고 자동으로 지급되는 것은 아닙니다.');
@@ -104,7 +104,7 @@ function overallStep(period:CardPeriod):CardPeriod{
 }
 
 function outcomePeriod(node:RoadmapNode,procedure:Procedure,base:CardPeriod):CardPeriod{
- const text=[node.title,node.description,...node.conditions].join(' ');
+ const text=[node.title,node.description,...(node.conditions||[])].join(' ');
  const positive=/이의\s*없이|이의(?:신청)?(?:가|를|을)?\s*(?:없|하지\s*않|않|안)|확정/.test(text);
  const contested=/소송으로|소송절차|다투|적법하게 이의|이의신청을 하|불성립|항소|불복/.test(text);
  const paid=/실제.*(?:받|지급)|입금|돈을.*받|지급.*완료|전액.*지급/.test(text);

@@ -43,7 +43,8 @@ test('group header reuses route-wide duration without summing individual step de
  assert.equal(groupProcedurePeriod({title:'민사소송',kind:'route'}).label,'1심 평균 약 5~13개월');
  assert.equal(groupProcedurePeriod({title:'재산명시 신청',kind:'route'}).label,'전체 약 2~4개월');
  const provisional=groupProcedurePeriod({title:'가압류 신청',kind:'route'});
- assert.equal(provisional.label,'전체 기간 근거 미확인');
+ assert.doesNotMatch(provisional.label,/전체 약 \d/);
+ assert.match(provisional.label,/일정|미확인/);
  assert.equal(provisional.estimated,false);
  assert.equal(groupProcedurePeriod({title:'분류되지 않은 절차',kind:'route'}).estimated,false);
 });
@@ -67,7 +68,7 @@ test('debtor registry timing is resolved separately from disclosure and clearly 
  assert.match(apply.note,/제출에 6주가 필요한 것은 아닙니다/);
  const unknown=mapCardPeriod({title:'분류되지 않은 절차',kind:'route'});
  assert.equal(unknown.category,'variable');
- assert.match(unknown.note,/실제 사건 처리기간/);
+ assert.match(unknown.note,/일률적인 소요기간/);
 });
 
 test('completed preliminary stages must not mark judicial action completed',()=>{
