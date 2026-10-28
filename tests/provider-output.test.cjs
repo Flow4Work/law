@@ -23,7 +23,7 @@ test('B.AI reasoning-only length response is retried with room for a complete ob
  assert.equal(result.answer,'complete');assert.equal(calls.length,2);
  assert(calls[0].body.max_tokens>=14000);
  assert(calls[1].body.max_tokens>calls[0].body.max_tokens);
- assert.equal(calls[0].body.response_format.type,'json_object');
+ assert.equal(calls[0].body.response_format,undefined);
  assert(progress.some(p=>p.phase==='formatting'));
 });
 test('GPT Responses receives JSON mode and includes only assistant text, excluding reasoning',async()=>{
@@ -55,7 +55,7 @@ test('malformed JSON retries with a larger budget, without inventing missing fie
  assert.equal(calls[1].body.messages[1].content,'test');
 });
 test('explicitly unsupported JSON mode falls back once, while auth and billing do not retry',async()=>{
- const {api,calls}=load({},[{status:400,data:{error:{message:'response_format json_object is not supported'}}},chat('{"ok":true}')]);
+ const {api,calls}=load({model:'claude-haiku-4.5'},[{status:400,data:{error:{message:'response_format json_object is not supported'}}},chat('{"ok":true}')]);
  assert.equal((await api.requestObject('JSON','test')).ok,true);assert.equal(calls[1].body.response_format,undefined);
  for(const status of [401,402,403]){
   const {api,calls}=load({},[{status,data:{error:{message:'denied'}}}]);

@@ -23,12 +23,14 @@ export async function requestAI(prompt:string,content:string,maxTokens=6000,opti
  const messages=[{role:'system',content:prompt},{role:'user',content}];
  const glm53=cfg.provider==='glm'&&/^glm-5\.3(?:-|$)/i.test(cfg.model)&&!/flash/i.test(cfg.model);
  const effort=cfg.effort||'low';
+ // MiniMax's gateway does not confirm JSON-mode support. Keep its final JSON in the prompt.
+ const jsonMode=options.json&&!(cfg.provider==='bai'&&/^minimax-/i.test(cfg.model));
  let tokenBudget=outputBudget(cfg.provider,cfg.model,maxTokens,Boolean(options.json),effort);
  const body:Record<string,unknown>=responses?{model:cfg.model,input:messages,max_output_tokens:tokenBudget,
-  ...(options.json?{text:{format:{type:'json_object'}}}:{})
+  ...(jsonMode?{text:{format:{type:'json_object'}}}:{})
  }:{model:cfg.model,messages,max_tokens:tokenBudget,temperature:0.2,
   ...(glm53?{thinking:{type:'enabled'},reasoning_effort:effort}:cfg.provider==='glm'?{thinking:{type:'disabled'}}:{}),
-  ...(options.json&&['glm','openrouter','opencode','bai'].includes(cfg.provider)?{response_format:{type:'json_object'}}:{})};
+  ...(jsonMode&&['glm','openrouter','opencode','bai'].includes(cfg.provider)?{response_format:{type:'json_object'}}:{})};
  const queueKey=createHash('sha256').update(base+'|'+cfg.key).digest('hex');
  let queue=queues.get(queueKey);if(!queue){queue=new RequestQueue();queues.set(queueKey,queue)}
  if(queue.busy)scope?.onProgress?.({phase:'waiting',message:'앞선 요청이 끝나기를 기다리고 있어요. 순서가 되면 이어서 살펴볼게요.'});
