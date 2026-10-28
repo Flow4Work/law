@@ -54,24 +54,31 @@ function RoadmapConnector({id,sourceX,sourceY,targetX,targetY,markerEnd,style,da
   const bottomCurve=maxY>sourceY+.5;
   const trunkTop=minY+(topCurve?radius:0);
   const trunkBottom=maxY-(bottomCurve?radius:0);
-  // Neutral shared spine never becomes fully red when only one branch is selected.
-  // Clip its endpoints so the top/bottom branches join with rounded elbows.
-  const trunk=`M ${sourceX} ${sourceY} L ${laneX} ${sourceY} M ${laneX} ${trunkTop} L ${laneX} ${trunkBottom}`;
+  // One owner renders the shared spine; each child renders ONLY its own leg.
+  // Never draw a complete selected path on top of a sibling's neutral path.
   const top=Math.abs(targetY-minY)<.5&&topCurve;
   const bottom=Math.abs(targetY-maxY)<.5&&bottomCurve;
-  const neutralArrow=top
+  const leg=top
    ?`M ${laneX} ${targetY+radius} Q ${laneX} ${targetY} ${laneX+radius} ${targetY} L ${targetX} ${targetY}`
    :bottom
    ?`M ${laneX} ${targetY-radius} Q ${laneX} ${targetY} ${laneX+radius} ${targetY} L ${targetX} ${targetY}`
    :`M ${laneX} ${targetY} L ${targetX} ${targetY}`;
-  const selectedBranch=data.selectedBranch===true;
-  // Red overlay ends at this ONE selected card. Other branches and the
-  // remaining trunk keep their neutral stroke, with no red overshoot.
-  const redArrow=Math.abs(targetY-sourceY)<.5
-   ?`M ${sourceX} ${sourceY} L ${targetX} ${targetY}`
-   :`M ${sourceX} ${sourceY} L ${laneX} ${sourceY} L ${laneX} ${targetY+(targetY<sourceY?radius:-radius)} Q ${laneX} ${targetY} ${laneX+radius} ${targetY} L ${targetX} ${targetY}`;
-  return <>{data.branchOwner===true&&<BaseEdge id={id+'-trunk'} path={trunk} style={{...style,stroke:'var(--map-edge)',strokeWidth:1.4}}/>}
-   <BaseEdge id={id} path={selectedBranch?redArrow:neutralArrow} markerEnd={markerEnd} style={style}/></>;
+  const selectedY=typeof data.sharedSelectedY==='number'?data.sharedSelectedY:null;
+  const activeEnd=selectedY===null?sourceY:selectedY<sourceY?selectedY+radius:selectedY>sourceY?selectedY-radius:sourceY;
+  const redStart=Math.max(trunkTop,Math.min(sourceY,activeEnd));
+  const redEnd=Math.min(trunkBottom,Math.max(sourceY,activeEnd));
+  const neutralStyle={...style,stroke:'var(--map-edge)',strokeWidth:1.4};
+  const activeStyle={...style,stroke:'var(--accent)',strokeWidth:2.1};
+  const vertical=(a:number,b:number)=>`M ${laneX} ${a} L ${laneX} ${b}`;
+  return <>{data.branchOwner===true&&<>
+    <BaseEdge id={id+'-stem'} path={`M ${sourceX} ${sourceY} L ${laneX} ${sourceY}`} style={selectedY===null?neutralStyle:activeStyle}/>
+    {redEnd>redStart+.5?<>
+      {redStart>trunkTop+.5&&<BaseEdge id={id+'-spine-before'} path={vertical(trunkTop,redStart)} style={neutralStyle}/>}
+      <BaseEdge id={id+'-spine-active'} path={vertical(redStart,redEnd)} style={activeStyle}/>
+      {trunkBottom>redEnd+.5&&<BaseEdge id={id+'-spine-after'} path={vertical(redEnd,trunkBottom)} style={neutralStyle}/>}
+    </>:trunkBottom>trunkTop+.5&&<BaseEdge id={id+'-spine'} path={vertical(trunkTop,trunkBottom)} style={neutralStyle}/>}
+   </>}
+   <BaseEdge id={id} path={leg} markerEnd={markerEnd} style={style}/></>;
  }
  // Single links use a rounded orthogonal path inside the empty gutter.
  const points=adjacent
@@ -169,14 +176,28 @@ export function Canvas({value,selected,focusId,onSelect,busy}:{value:LegalCase;s
  },[graph.nodes]);
  const focusedPath=useMemo(()=>focusedRoadmapPath(graph.nodes,graph.edges,selected||focusId),[graph,selected,focusId]);
  const focusedIds=focusedPath.nodeIds;
- const edges=useMemo(()=>graph.edges.map(edge=>{
+ const edges=useMemo(()=>{
+  // Each shared gutter owns exactly one stem. Find the selected child height
+  // once and pass it to that stem owner; child edges only paint their legs.
+  const nodeY=new Map(graph.nodes.map(node=>[node.id,node.position.y+ROADMAP_CARD.height/2]));
+  const selectedTargets=new Map<string,number>();
+  for(const edge of graph.edges){
+   if(edge.data?.sharedBranch&&focusedPath.edgeIds.has(edge.id)){
+    const y=nodeY.get(edge.target);
+    if(y!==undefined)selectedTargets.set(edge.source,y);
+   }
+  }
+  return graph.edges.map(edge=>{
    const highlighted=focusedPath.edgeIds.has(edge.id);
+   const sharedSelectedY=edge.data?.sharedBranch?selectedTargets.get(edge.source):undefined;
    const color=highlighted?'var(--accent)':'var(--map-edge)';
-   return {...edge,data:{...edge.data,selectedBranch:highlighted},
-    className:highlighted?'path-focused':focusedIds?'path-muted':undefined,
+   const ownsActiveStem=edge.data?.branchOwner===true&&sharedSelectedY!==undefined;
+   return {...edge,data:{...edge.data,selectedBranch:highlighted,sharedSelectedY},
+    className:highlighted?'path-focused':ownsActiveStem?undefined:focusedIds?'path-muted':undefined,
     style:{...edge.style,stroke:color,strokeWidth:highlighted?2.1:1.4},
     markerEnd:{type:MarkerType.ArrowClosed,color,width:12,height:12}};
- }),[graph.edges,focusedPath,focusedIds]);
+  });
+ },[graph.edges,graph.nodes,focusedPath,focusedIds]);
  const nodes=useMemo(()=>{
   const hasIncoming=new Set(graph.edges.map(edge=>edge.target));
   return graph.nodes.map(n=>{

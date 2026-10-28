@@ -98,6 +98,23 @@ test('IP points are classified against district polygons; missing, invalid and o
  header.delete('x-vercel-ip-latitude');assert.equal((await activityLocation(header)).district,'');
 });
 
+test('three databases vote, so a single outlier cannot name the district',async()=>{
+ const header=new Headers({'x-vercel-forwarded-for':'112.187.136.60','x-vercel-ip-country':'KR','x-vercel-ip-country-region':'11','x-vercel-ip-city':'Seoul','x-vercel-ip-postal-code':'03141','x-vercel-ip-latitude':'37.5665','x-vercel-ip-longitude':'126.9780'});
+ const fakeFetch=async url=>{
+  const href=String(url);
+  if(href.includes('ip-api.com'))return {ok:true,json:async()=>({status:'success',countryCode:'KR',region:'11',regionName:'Seoul',city:'Seongdong-gu',zip:'047',lat:37.5511,lon:127.0387,isp:'Korea Telecom',as:'AS4766',mobile:false,proxy:false,hosting:false})};
+  if(href.includes('ip.sb'))return {ok:true,json:async()=>({country_code:'KR',region:'Seoul',region_code:'11',city:'Gwangjin-gu',postal_code:'051',latitude:37.547,longitude:127.0958,isp:'KT',asn:4766})};
+  return {ok:true,json:async()=>({countryCode:'KR',regionName:'Seoul',regionCode:'11',cityName:'Jayang-dong',zipCode:'13118',latitude:37.5317,longitude:127.075})};
+ };
+ const value=await load('activity-location',{},{},{fetch:fakeFetch}).activityLocation(header);
+ assert.equal(value.location,'서울특별시 광진구',"two databases must outvote one outlier");
+ assert.equal(value.districtConfidence,'medium');
+ assert(value.districtEvidence.includes('ip.sb 광진구'),value.districtEvidence);
+ assert(value.districtEvidence.includes('ip-api 성동구'),value.districtEvidence);
+ assert(!value.districtEvidence.includes('종로구'),'the Seoul registration postcode must stay out of the evidence chain');
+ assert(value.locationNote.includes('중심 기본값'),value.locationNote);
+ assert.equal(value.isp,'Korea Telecom');
+});
 test('an independent district-aware database supplies the district when Vercel reports only the city',async()=>{
  const {activityLocation,requestAddress}=load('activity-location');
  const header=new Headers({'x-vercel-forwarded-for':'121.130.10.20','x-vercel-ip-country':'KR','x-vercel-ip-country-region':'11','x-vercel-ip-city':'Seoul','x-vercel-ip-latitude':'37.5665','x-vercel-ip-longitude':'126.978'});
@@ -108,13 +125,11 @@ test('an independent district-aware database supplies the district when Vercel r
  assert.equal(value.district,'노원구');
  assert.equal(value.districtSource,'geo-city');
  assert.equal(value.districtConfidence,'medium');
- assert(value.districtEvidence.includes('IP DB 도시명 노원구'));
- assert(value.districtEvidence.includes('IP DB 우편번호 018xx 노원구'));
- assert(value.districtEvidence.includes('IP DB 대표좌표 노원구'));
+ assert(value.districtEvidence.includes('ip-api 노원구'),value.districtEvidence);
  assert.equal(value.isp,'Korea Telecom');
  assert.equal(value.ipVersion,'IPv4');
- assert.equal(looked.length,1);assert(looked[0].includes('ip-api.com/json/121.130.10.20'));
- await api.activityLocation(header);assert.equal(looked.length,1,'repeated events reuse the cached lookup');
+ assert.equal(looked.length,3);assert(looked.some(url=>url.includes('ip-api.com/json/121.130.10.20')));assert(looked.some(url=>url.includes('api.ip.sb/geoip/121.130.10.20')));assert(looked.some(url=>url.includes('freeipapi.com/api/json/121.130.10.20')));
+ await api.activityLocation(header);assert.equal(looked.length,3,'repeated events reuse the cached lookup');
  const privateHeader=new Headers({'x-forwarded-for':'10.0.0.4'});
  assert.equal(requestAddress(privateHeader).public,false);
  assert.equal((await api.activityLocation(privateHeader)).isp,'');

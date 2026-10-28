@@ -99,34 +99,71 @@ function isPublicIp(ip:string){
  return false;
 }
 
-type GeoLookup={country:string;region:string;regionCode:string;city:string;zip:string;latitude:number;longitude:number;isp:string;asn:string;mobile:boolean;proxy:boolean;hosting:boolean};
+/** One independent database's opinion. Each provider gets exactly one vote. */
+type Dataset={name:string;region:string;regionCode:string;city:string;zip:string;latitude:number;longitude:number};
+type GeoLookup={country:string;region:string;regionCode:string;city:string;zip:string;latitude:number;longitude:number;isp:string;asn:string;mobile:boolean;proxy:boolean;hosting:boolean;datasets:Dataset[]};
 const lookupCache=new Map<string,{at:number;value:GeoLookup|null}>();
 const LOOKUP_TTL=6*60*60*1000,LOOKUP_LIMIT=400;
-/** Second opinion from a district-aware IP database. Disabled with LEGAL_IP_LOOKUP=off. */
+const LOOKUP_TIMEOUT=2500;
+async function fetchJson(url:string){
+ if(typeof fetch!=='function')return null;
+ const controller=typeof AbortController==='function'?new AbortController():null;
+ const timer=controller?setTimeout(()=>controller.abort(),LOOKUP_TIMEOUT):null;
+ try{
+  const response=await fetch(url,{signal:controller?.signal,headers:{Accept:'application/json'},cache:'no-store'});
+  return response.ok?await response.json() as Record<string,unknown>:null;
+ }catch{return null}finally{if(timer)clearTimeout(timer)}
+}
+/**
+ * Ask several independent databases at once. They disagree by kilometres inside Seoul,
+ * so one provider is never trusted on its own: the district needs corroboration.
+ * Disabled with LEGAL_IP_LOOKUP=off.
+ */
 async function lookupAddress(ip:string,address:RequestAddress):Promise<GeoLookup|null>{
  if(!address.public||process.env.LEGAL_IP_LOOKUP==='off')return null;
  const cached=lookupCache.get(ip);
  if(cached&&Date.now()-cached.at<LOOKUP_TTL)return cached.value;
  if(lookupCache.size>LOOKUP_LIMIT)for(const [key,entry] of lookupCache)if(Date.now()-entry.at>=LOOKUP_TTL)lookupCache.delete(key);
  const fields='status,message,country,countryCode,region,regionName,city,zip,lat,lon,isp,org,as,mobile,proxy,hosting';
+ const [primary,second,third]=await Promise.all([
+  fetchJson(`http://ip-api.com/json/${ip}?fields=${fields}&lang=en`),
+  fetchJson(`https://api.ip.sb/geoip/${ip}`),
+  fetchJson(`https://freeipapi.com/api/json/${ip}`)
+ ]);
+ const datasets:Dataset[]=[];
  let value:GeoLookup|null=null;
- if(typeof fetch==='function'){
-  const controller=typeof AbortController==='function'?new AbortController():null;
-  const timer=controller?setTimeout(()=>controller.abort(),2500):null;
-  try{
-   const response=await fetch(`http://ip-api.com/json/${ip}?fields=${fields}&lang=en`,{signal:controller?.signal,headers:{Accept:'application/json'},cache:'no-store'});
-   const data=response.ok?await response.json() as Record<string,unknown>:null;
-   if(data&&data.status==='success'&&String(data.countryCode||'').toUpperCase()==='KR'){
-    value={country:'KR',region:String(data.regionName||''),regionCode:String(data.region||''),city:String(data.city||''),zip:String(data.zip||''),latitude:coordinate(data.lat as number),longitude:coordinate(data.lon as number),isp:String(data.isp||data.org||'').slice(0,60),asn:String(data.as||'').slice(0,40),mobile:data.mobile===true,proxy:data.proxy===true,hosting:data.hosting===true};
-   }
-  }catch{value=null}finally{if(timer)clearTimeout(timer)}
+ if(primary&&primary.status==='success'&&String(primary.countryCode||'').toUpperCase()==='KR'){
+  const dataset:Dataset={name:'ip-api',region:String(primary.regionName||''),regionCode:String(primary.region||''),city:String(primary.city||''),zip:String(primary.zip||''),latitude:coordinate(primary.lat as number),longitude:coordinate(primary.lon as number)};
+  datasets.push(dataset);
+  value={country:'KR',...dataset,isp:String(primary.isp||primary.org||'').slice(0,60),asn:String(primary.as||'').slice(0,40),mobile:primary.mobile===true,proxy:primary.proxy===true,hosting:primary.hosting===true,datasets};
  }
+ const secondOk=Boolean(second&&String(second.country_code||'').toUpperCase()==='KR');
+ if(secondOk)datasets.push({name:'ip.sb',region:String(second?.region||''),regionCode:String(second?.region_code||''),city:String(second?.city||''),zip:String(second?.postal_code||''),latitude:coordinate(second?.latitude as number),longitude:coordinate(second?.longitude as number)});
+ const thirdOk=Boolean(third&&String(third.countryCode||'').toUpperCase()==='KR'&&typeof third.cityName==='string');
+ if(thirdOk)datasets.push({name:'freeipapi',region:String(third?.regionName||''),regionCode:String(third?.regionCode||''),city:String(third?.cityName||''),zip:String(third?.zipCode||''),latitude:coordinate(third?.latitude as number),longitude:coordinate(third?.longitude as number)});
+ if(!value&&datasets.length){
+  value={country:'KR',...datasets[0],isp:String((secondOk?second?.isp:'')||(thirdOk?third?.asnOrganization:'')||'').slice(0,60),asn:String((secondOk?second?.asn:'')||(thirdOk?third?.asn:'')||'').slice(0,40),mobile:false,proxy:thirdOk&&third?.isProxy===true,hosting:false,datasets};
+ }
+ if(value)value.datasets=datasets;
  lookupCache.set(ip,{at:Date.now(),value});
  return value;
 }
 
-type Evidence={source:ActivityDistrictSource;group:'vercel'|'geo';district:string;weight:number;label:string};
+type Evidence={source:ActivityDistrictSource;group:string;district:string;weight:number;label:string;multi?:boolean;quiet?:boolean};
 const maskPostcode=(postal:string)=>postal.length===5?`${postal.slice(0,3)}xx`:`${postal}xx`;
+const datasetIsSeoul=(dataset:Dataset)=>/^11$/.test(dataset.regionCode)||/seoul|서울/i.test(dataset.region)||Boolean(cityDistrict(dataset.city));
+/** The district one database names, plus how many of its own signals agree on it. */
+function datasetDistrict(dataset:Dataset){
+ const named=cityDistrict(dataset.city);
+ const point=seoulDistrictAt(dataset.latitude,dataset.longitude);
+ const pointOk=point&&!isCityCentrePoint(dataset.latitude,dataset.longitude)?point:'';
+ const postal=seoulPostalDistrict(dataset.zip)||seoulPostalPrefixDistrict(dataset.zip);
+ const district=named||pointOk||postal;
+ if(!district)return {district:'',source:'unavailable' as ActivityDistrictSource,signals:0};
+ const signals=(named===district?1:0)+(pointOk===district?1:0)+(postal===district?1:0);
+ const source:ActivityDistrictSource=named===district?'geo-city':pointOk===district?'geo-coordinate':'geo-postal';
+ return {district,source,signals};
+}
 
 function resolveDistrict(evidence:Evidence[]){
  const scores=new Map<string,number>();
@@ -135,18 +172,19 @@ function resolveDistrict(evidence:Evidence[]){
  for(const [name,value] of scores)if(value>score){district=name;score=value}
  const winning=evidence.filter(item=>item.district===district).sort((a,b)=>b.weight-a.weight);
  const competing=evidence.some(item=>item.district!==district&&item.weight>=3);
- const confirmed=new Set(winning.filter(item=>item.weight>=3).map(item=>item.group));
+ const groups=new Set(winning.map(item=>item.group));
  const full=winning.filter(item=>(item.source==='ip-postal'||item.source==='geo-postal')&&item.weight>=6);
- const named=winning.filter(item=>item.weight>=2&&(item.source==='ip-city'||item.source==='geo-city'||item.source==='ip-postal'||item.source==='geo-postal'));
+ const named=winning.some(item=>item.weight>=2&&(item.source==='ip-city'||item.source==='geo-city'||item.source==='ip-postal'||item.source==='geo-postal'));
+ const multi=winning.some(item=>item.multi);
  let confidence:ActivityConfidence='low';
- if(full.length&&(full.some(item=>item.group==='vercel')||confirmed.size>=2))confidence='high';
- else if(full.length||named.length)confidence='medium';
+ if(groups.size>=3||(full.length&&groups.size>=2))confidence='high';
+ else if(groups.size>=2||full.length||multi||named)confidence='medium';
  if(competing)confidence=confidence==='high'?'medium':confidence;
  return {
   district,
   source:winning[0]?.source||'unavailable' as ActivityDistrictSource,
   confidence,
-  evidence:evidence.map(item=>`${item.label} ${item.district}`).join(' · ')
+  evidence:evidence.filter(item=>!item.quiet).map(item=>`${item.label} ${item.district}`).join(' · ')
  };
 }
 
@@ -159,42 +197,42 @@ export async function activityLocation(headers:Headers,verifiedDistrict=''){
  const vercelRegion=decode(headers.get('x-vercel-ip-country-region'));
  const vercelCity=decode(headers.get('x-vercel-ip-city'));
  const vercelPostal=decode(headers.get('x-vercel-ip-postal-code'));
- const seoul=country==='KR'&&(isSeoulText(vercelRegion,vercelCity)||Boolean(geo&&(geo.regionCode==='11'||/seoul|서울/i.test(geo.region)||cityDistrict(geo.city)||seoulPostalPrefixDistrict(geo.zip)&&/^0[0-8]\d$/.test(geo.zip))));
+ const datasets=geo?.datasets||[];
+ const seoulVotes=datasets.filter(datasetIsSeoul).length;
+ const seoul=country==='KR'&&(datasets.length?seoulVotes*2>=datasets.length:isSeoulText(vercelRegion,vercelCity));
  const evidence:Evidence[]=[];
  let locationNote='',centreOnly=false;
  if(seoul){
-  const geoNames:Evidence[]=[];
-  if(geo){
-   const geoNamed=cityDistrict(geo.city);
-   if(geoNamed)geoNames.push({source:'geo-city',group:'geo',district:geoNamed,weight:4,label:'IP DB 도시명'});
-   const geoPostal=seoulPostalDistrict(geo.zip)||seoulPostalPrefixDistrict(geo.zip);
-   if(geoPostal)geoNames.push({source:'geo-postal',group:'geo',district:geoPostal,weight:/^\d{5}$/.test(geo.zip)?6:3,label:`IP DB 우편번호 ${maskPostcode(geo.zip)}`});
-   const geoPoint=seoulDistrictAt(geo.latitude,geo.longitude);
-   if(geoPoint&&!isCityCentrePoint(geo.latitude,geo.longitude))geoNames.push({source:'geo-coordinate',group:'geo',district:geoPoint,weight:1,label:'IP DB 대표좌표'});
-   else if(geoPoint&&!centreOnly)centreOnly=true;
+  const votes:Evidence[]=[];
+  for(const dataset of datasets){
+   if(!datasetIsSeoul(dataset))continue;
+   const found=datasetDistrict(dataset);
+   if(found.district)votes.push({source:found.source,group:dataset.name,district:found.district,weight:3,label:`IP DB ${dataset.name}`,multi:found.signals>=2});
   }
   const named=cityDistrict(vercelCity);
-  if(named)evidence.push({source:'ip-city',group:'vercel',district:named,weight:4,label:'도시명'});
+  if(named)evidence.push({source:'ip-city',group:'vercel',district:named,weight:3,label:'도시명'});
   const postal=seoulPostalDistrict(vercelPostal);
   if(postal){
-   // For Korean addresses Vercel's postcode is often the same city-centre registration
-   // postcode for the whole capital, so it only counts strongly once a district-aware
-   // database confirms it. On its own it is a weak hint, not proof.
-   const corroborated=geoNames.some(item=>item.district===postal&&item.weight>=3);
-   evidence.push({source:'ip-postal',group:'vercel',district:postal,weight:corroborated?6:2,label:`우편번호 ${maskPostcode(vercelPostal)}`});
+   // Vercel's Korean postcode is usually the capital's registration postcode (031xx), so it
+   // only counts strongly when a district-aware database names the same district.
+   const corroborated=votes.some(item=>item.district===postal);
+   evidence.push({source:'ip-postal',group:'vercel',district:postal,weight:corroborated?6:2,label:`우편번호 ${maskPostcode(vercelPostal)}`,quiet:!corroborated&&votes.length>0});
   }
   const pointLat=headerCoordinate(headers,'x-vercel-ip-latitude'),pointLon=headerCoordinate(headers,'x-vercel-ip-longitude');
   const point=seoulDistrictAt(pointLat,pointLon);
   if(point&&!isCityCentrePoint(pointLat,pointLon))evidence.push({source:'ip-coordinate',group:'vercel',district:point,weight:1,label:'대표좌표'});
   else if(point)centreOnly=true;
-  evidence.push(...geoNames);
+  evidence.push(...votes);
  }
  const resolved=seoul?resolveDistrict(evidence):{district:'',source:'unavailable' as ActivityDistrictSource,confidence:'low' as ActivityConfidence,evidence:''};
  if(seoul&&resolved.district){
-  const conflict=evidence.filter(item=>item.district!==resolved.district&&item.weight>=3);
-  const weakPostal=evidence.find(item=>item.source==='ip-postal'&&item.weight<6&&item.district!==resolved.district);
-  if(conflict.length)locationNote=`구 판별 근거가 엇갈립니다(${conflict.map(item=>`${item.label} ${item.district}`).join(' · ')}). 근거가 더 강한 ${resolved.district}로 표시합니다.`;
-  else if(weakPostal)locationNote=`Vercel 우편번호(${weakPostal.label.replace('우편번호 ','')})는 서울시 중심 기본값일 수 있습니다. IP 데이터베이스 기준 ${resolved.district}로 표시합니다.`;
+  const dissent=[...new Set(evidence.filter(item=>item.group!=='vercel'&&item.district!==resolved.district).map(item=>`${item.label.replace('IP DB ','')} ${item.district}`))];
+  const quietPostal=evidence.find(item=>item.source==='ip-postal'&&item.weight<6&&item.district!==resolved.district);
+  const supporters=new Set(evidence.filter(item=>item.district===resolved.district).map(item=>item.group)).size;
+  const notes:string[]=[];
+  if(dissent.length)notes.push(supporters>=2?`IP 데이터베이스가 갈립니다(${dissent.join(' · ')}). ${supporters}곳이 일치한 ${resolved.district}로 표시합니다.`:`IP 데이터베이스가 갈립니다(${dissent.join(' · ')}). 다수가 없어 대표값 ${resolved.district}로 표시합니다.`);
+  if(quietPostal)notes.push(`Vercel 우편번호(${quietPostal.label.replace('우편번호 ','')})는 서울시 중심 기본값일 수 있습니다.`);
+  locationNote=notes.join(' ');
  }else if(seoul&&!resolved.district){
   const elsewhere=geo&&geo.city&&geo.regionCode!=='11'&&!/seoul|서울/i.test(geo.city)&&!cityDistrict(geo.city)?`IP 데이터베이스는 ${geo.region||'해외'} ${geo.city}(으)로 보고합니다. `:'';
   locationNote=elsewhere?`${elsewhere}서울 구 판별 정보가 부족합니다.`:centreOnly?'IP 데이터가 서울 중심점 좌표만 제공해 구를 표시하지 않습니다.':'이 IP에는 서울 구를 판별할 위치 정보가 없습니다.';

@@ -17,34 +17,50 @@ that point as a district is why every Seoul record used to read `서울특별시
 `src/lib/activity-location.ts` therefore collects several independent signals and
 only reports a district that they support:
 
-| Signal | Source | Weight |
+| Signal | Source | Vote |
 | --- | --- | --- |
-| Full five-digit postcode | `x-vercel-ip-postal-code` or the IP database | 6 |
-| District naming city (`Nowon-gu`, `노원구`) | `x-vercel-ip-city` or the IP database | 4 |
-| Coarse three-digit postcode prefix (`018xx`) | IP database `zip` | 3 |
-| Approximate point inside a district polygon | either provider | 1 |
+| One database's opinion (its naming city, then its point, then its postcode) | `ip-api`, `ip.sb`, `freeipapi` | 1 each |
+| District naming city (`Gangnam-gu`, `노원구`) | `x-vercel-ip-city` | 1 |
+| Five-digit postcode | `x-vercel-ip-postal-code` | 1.5, or 0.5 when no database agrees |
+| Coarse three-digit postcode prefix (`018xx`) | `x-vercel-ip-postal-code` | included in the postcode vote |
+| Approximate point inside a district polygon | `x-vercel-ip-latitude` / `longitude` | 0.3 |
+
+Each database gets **one** vote regardless of how many of its own fields agree, so a
+provider that returns a consistent city, postcode and point cannot outvote two other
+providers. This is what fixes the `성동구` outlier: ip-api says `성동구`, ip.sb says
+`광진구` and freeipapi's point lands in `광진구`, so the record reads `광진구`.
 
 Rules:
 
 * A point within 1.2 km of the Seoul centre is treated as "no information" and never
   produces a district.
-* Evidence from both the Vercel headers and the IP database must agree before a
-  district is reported with `정확도 높음`. A single provider is capped at `정확도 보통`,
-  a bare point at `정확도 낮음`.
-* Conflicting district evidence is never silently averaged: the strongest evidence is
-  stored and the disagreement is written to `locationNote`.
+* Vercel's Korean postcode is the capital's registration postcode (`031xx` → 종로구) for
+  almost every Seoul address. It only counts strongly when a database names the same
+  district; otherwise it is a weak hint and stays out of the evidence chain.
+* `정확도 높음` requires three agreeing sources (or a corroborated postcode plus another
+  source). Two agreeing databases give `정확도 보통`, one gives `정확도 낮음`.
+* Conflicting district evidence is never silently averaged: the majority is stored and
+  the disagreement, with the provider that disagreed, is written to `locationNote`.
 * When nothing is known the record keeps `서울특별시` and says so, instead of guessing.
 
-### Third-party IP database
+Only Seoul is resolved. Other Korean addresses keep the city name the providers report.
 
-When Vercel's headers do not identify a district the server asks
-[ip-api.com](https://ip-api.com/docs/api:json) for that one visitor IP
-(`city`, `zip`, coordinates, ISP, proxy/hosting flags) and maps the answer locally.
-The visitor IP is therefore disclosed to that service; no query text, cookie or
-coordinate is ever sent. Set `LEGAL_IP_LOOKUP=off` to keep lookups inside Vercel
-only. Lookups are cached per IP for six hours, are skipped for private and
-loopback addresses, time out after 2.5 seconds, and never block an activity record.
-ip-api.com is free for non-commercial use only; review its terms before commercial use.
+### Third-party IP databases
+
+The server asks three services for the visitor IP and maps all answers locally:
+
+| Service | Fields used |
+| --- | --- |
+| [ip-api.com](https://ip-api.com/docs/api:json) | city, postcode, point, ISP, ASN, mobile/proxy/hosting |
+| [api.ip.sb](https://ip.sb/api/) | region, district naming city, postcode, point, ISP |
+| [freeipapi.com](https://freeipapi.com/) | region, neighbourhood name (`Jayang-dong`), point |
+
+The visitor IP is therefore disclosed to those services; no query text, cookie or
+coordinate is ever sent. Set `LEGAL_IP_LOOKUP=off` to keep lookups inside Vercel only.
+All three calls run in parallel, share one per-IP cache for six hours, are skipped for
+private and loopback addresses, time out after 2.5 seconds, and never block an activity
+record. ip-api.com is free for non-commercial use only; review its terms before
+commercial use.
 
 The response also records `isp`, `asn`, `networkType` (일반/모바일/데이터센터·VPN) and
 `networkRisk` so a proxied or datacenter IP can be recognised instead of trusted.
