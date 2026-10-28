@@ -1,5 +1,5 @@
 'use client';
-import type {RefObject} from 'react';
+import {useEffect,type RefObject} from 'react';
 import {Plus,Trash2,PanelLeftClose,ArrowRight,AlertCircle,X,LoaderCircle,ArrowUp} from 'lucide-react';
 import type {LegalCase} from '@/lib/types';
 import {EXAMPLE_QUESTIONS} from '@/lib/types';
@@ -18,7 +18,7 @@ const formatHistoryTime=(value:string)=>{
 };
 
 export type ConversationPanelProps={
- showcaseStage?:number; historyOpen:boolean; sorted:LegalCase[]; activeId:string|null; active:LegalCase|undefined; current:LegalCase;
+ showcaseStage?:number;pendingHintPulse:number; historyOpen:boolean; sorted:LegalCase[]; activeId:string|null; active:LegalCase|undefined; current:LegalCase;
  busy:boolean; hasMessages:boolean; input:string; chosenModelId:string; chosenModelAvailable:boolean; alternateRetryAvailable:boolean; alternateRetryLabel:string;
  inventory:ModelInventory|null; analysisProgress:AnalysisProgressState; error:string;
  bottomRef:RefObject<HTMLDivElement|null>; inputRef:RefObject<HTMLTextAreaElement|null>;
@@ -27,7 +27,20 @@ export type ConversationPanelProps={
  chooseModel:(id:string)=>void; onCollapse:()=>void; onOpenCase:(id:string)=>void; onCancel:()=>void;
  onShowMap:()=>void; onDismissError:()=>void; onInputChange:(value:string)=>void; onOpenSettings:()=>void;
 };
-export function ConversationPanel({showcaseStage=-1,historyOpen,sorted,activeId,active,current,busy,hasMessages,input,chosenModelId,chosenModelAvailable,alternateRetryAvailable,alternateRetryLabel,inventory,analysisProgress,error,bottomRef,inputRef,newCase,deleteCase,fillInput,submit,acceptIntakeAnswer,retryWithAlternative,chooseModel,onCollapse,onOpenCase,onCancel,onShowMap,onDismissError,onInputChange,onOpenSettings}:ConversationPanelProps){
+export function ConversationPanel({showcaseStage=-1,pendingHintPulse,historyOpen,sorted,activeId,active,current,busy,hasMessages,input,chosenModelId,chosenModelAvailable,alternateRetryAvailable,alternateRetryLabel,inventory,analysisProgress,error,bottomRef,inputRef,newCase,deleteCase,fillInput,submit,acceptIntakeAnswer,retryWithAlternative,chooseModel,onCollapse,onOpenCase,onCancel,onShowMap,onDismissError,onInputChange,onOpenSettings}:ConversationPanelProps){
+useEffect(()=>{
+ if(!pendingHintPulse||!active?.intake)return;
+ const card=document.querySelector<HTMLElement>('.conversation-panel .intake-card');
+ if(!card)return;
+ const computed=getComputedStyle(card);
+ const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+ const redBackground=card.closest('.app-shell.dark')?'#382326':'#fff0f0';
+ const frames:Keyframe[]=reducedMotion
+  ?[{backgroundColor:computed.backgroundColor,borderColor:computed.borderColor},{backgroundColor:redBackground,borderColor:'#dc7777',offset:.35},{backgroundColor:redBackground,borderColor:'#dc7777',offset:.7},{backgroundColor:computed.backgroundColor,borderColor:computed.borderColor}]
+  :[{backgroundColor:computed.backgroundColor,borderColor:computed.borderColor,transform:'translateX(0)'},{backgroundColor:redBackground,borderColor:'#dc7777',transform:'translateX(-3px)',offset:.18},{backgroundColor:redBackground,borderColor:'#dc7777',transform:'translateX(3px)',offset:.31},{backgroundColor:redBackground,borderColor:'#dc7777',transform:'translateX(-2px)',offset:.44},{backgroundColor:redBackground,borderColor:'#dc7777',transform:'translateX(2px)',offset:.58},{backgroundColor:redBackground,borderColor:'#dc7777',transform:'translateX(0)',offset:.72},{backgroundColor:computed.backgroundColor,borderColor:computed.borderColor,transform:'translateX(0)'}];
+ const animation=card.animate(frames,{duration:850,easing:'ease-in-out'});
+ return()=>animation.cancel();
+},[pendingHintPulse,active?.intake]);
 return (
 <section className="conversation-panel" aria-label="내 상황 이야기하기">
        {historyOpen?<><div className="chat-top has-messages history-heading"><h1>대화 기록</h1><span>{sorted.length}개</span>{current.nodes.length>0&&<button className="chat-fold-toggle" type="button" onClick={()=>onCollapse()} title="왼쪽 대화창 접기" aria-label="대화창 접기"><PanelLeftClose size={17}/><span>대화 접기</span></button>}</div>

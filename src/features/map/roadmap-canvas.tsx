@@ -24,7 +24,7 @@ function StageNode({data,selected}:NodeProps){
  const shortDescription=summaryLines.length<=2&&summaryLines.every(line=>line.length<=36)&&displaySummary.replace(/\n/g,'').length<=49;
  const parallelNote=!mandatoryNote&&shortDescription?roadmapParallelNote({...n,kind:visualKind},d.peerRoutes||[]):null;
  return <div className={'stage-card status-'+n.status+(visualKind==='situation'?' situation-card':'')+(n.scenario?' scenario-card':'')+(n.scenarioParentId?' process-'+visualKind:'')+(selected?' selected':'')}>
-    <button className="stage-open" aria-label={procedureName(n.title)+' 자세히 알아보기'} onClick={d.onOpen}/>
+    <button className="stage-open" aria-label={procedureName(n.title)+' 자세히 알아보기'} onClick={e=>{e.stopPropagation();d.onOpen()}}/>
     {(d.targetPorts||[50]).map((percent,i)=><Handle key={i} type="target" id={'in-'+i} position={Position.Left} style={{top:percent+'%'}} className="flow-handle"/>)}
     <div className="stage-card-top"><span className={'stage-pill '+(visualKind==='completion'?'stage-completion':visualKind==='route'?'stage-keyword':n.status)}>{visualKind==='situation'?'내 상황':visualKind==='step'?'진행 절차':visualKind==='outcome'?'가능한 결과':visualKind==='followup'?'후속 절차':visualKind==='completion'?'종료':visualKind==='route'?routeKeyword(n):NODE_STATUS[n.status].label}</span>{n.status==='verify'&&n.kind!=='outcome'&&n.kind!=='completion'&&<span className="stage-state verify">확인 필요</span>}{n.status==='done'&&<span className="stage-state done"><Check size={12}/>완료</span>}</div>
     <div className="stage-title">{procedureName(n.title)}</div>

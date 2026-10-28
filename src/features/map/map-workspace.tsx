@@ -9,6 +9,7 @@ import {MobileRoadmap} from './mobile-roadmap';
 import {Canvas} from './roadmap-canvas';
 import {displayDate} from '@/features/shared/date-format';
 export type MapWorkspaceProps={
+ pendingHintPulse:number;onPendingNode:()=>void;
  chatCollapsed:boolean;current:LegalCase;cases:LegalCase[];activeId:string|null;active:LegalCase|undefined;busy:boolean;
  sourcesOpen:boolean;done:RoadmapNode[];completedSummary:string;mapStatusText:string;
  mobile:boolean;mapCase:LegalCase;selected:string|null;focusId:string|null;flowIds:string[];flowPosition:number;
@@ -16,7 +17,16 @@ export type MapWorkspaceProps={
  onRefresh:()=>void;onToggleSources:()=>void;onCloseSources:()=>void;onSelectNode:(id:string)=>void;
  onContinueConversation:()=>void;onShowChat:()=>void;onFocusFlow:(direction:number)=>void;onFillInput:(text:string)=>void;
 };
-export function MapWorkspace({chatCollapsed,current,cases,activeId,active,busy,sourcesOpen,done,completedSummary,mapStatusText,mobile,mapCase,selected,focusId,flowIds,flowPosition,onExpandChat,onExample,onNewCase,onOpenCase,onDeleteCase,onMoveCase,onRefresh,onToggleSources,onCloseSources,onSelectNode,onContinueConversation,onShowChat,onFocusFlow,onFillInput}:MapWorkspaceProps){
+export function MapWorkspace({pendingHintPulse,onPendingNode,chatCollapsed,current,cases,activeId,active,busy,sourcesOpen,done,completedSummary,mapStatusText,mobile,mapCase,selected,focusId,flowIds,flowPosition,onExpandChat,onExample,onNewCase,onOpenCase,onDeleteCase,onMoveCase,onRefresh,onToggleSources,onCloseSources,onSelectNode,onContinueConversation,onShowChat,onFocusFlow,onFillInput}:MapWorkspaceProps){
+const handleNodeSelect=(id:string)=>{
+ const node=mapCase.nodes.find(item=>item.id===id);
+ if(active?.intake&&node?.kind==='route'&&node.status==='verify'&&!node.scenario){
+  onSelectNode(id);
+  onPendingNode();
+  return;
+ }
+ onSelectNode(id);
+};
 return (
 <div className="map-workspace">
        <div className="visual-header">
@@ -33,10 +43,10 @@ return (
            <div className="completed-path-items">{done.map(n=><button key={n.id} type="button" title={n.title} onClick={()=>onSelectNode(n.id)}>{n.title}<ChevronRight size={14}/></button>)}</div>
          </details>
        </div>}
-         {(busy||Boolean(active?.intake)||Boolean(active?.messages.at(-1)?.error))&&<MapStatus key={current.id+':'+(busy?'processing':active?.messages.at(-1)?.error?'error':'awaiting')} state={busy?'processing':active?.messages.at(-1)?.error?'error':'awaiting'} message={mapStatusText} onContinue={onContinueConversation}/>}
+         {(busy||Boolean(active?.intake)||Boolean(active?.messages.at(-1)?.error))&&<MapStatus key={current.id+':'+(busy?'processing':active?.messages.at(-1)?.error?'error':'awaiting')} state={busy?'processing':active?.messages.at(-1)?.error?'error':'awaiting'} message={mapStatusText} pendingHintPulse={pendingHintPulse} onContinue={onContinueConversation}/>}
        </div>
        <div className="diagram-content">
-         {busy&&!current.nodes.length?<MapSkeleton/>:<><div className="graph-wrapper">{current.nodes.length>0?<>{mobile?<MobileRoadmap key={current.id} value={mapCase} selected={selected} onSelect={onSelectNode} onChat={onShowChat} busy={busy}/>:<div className="desktop-roadmap"><ReactFlowProvider key={current.id}><Canvas value={mapCase} selected={selected} focusId={focusId} busy={busy||Boolean(active?.intake)} onSelect={onSelectNode}/></ReactFlowProvider></div>}{!mobile&&flowIds.length>1&&<div className="map-flow-navigation" aria-label="절차별 지도 이동"><button disabled={flowPosition===0} onClick={()=>onFocusFlow(-1)} aria-label="이전 절차 보기"><ChevronRight size={16} className="flip-horizontal"/></button><span>절차와 결과 {flowPosition+1}/{flowIds.length}</span><button disabled={flowPosition===flowIds.length-1} onClick={()=>onFocusFlow(1)} aria-label="다음 절차 보기"><ArrowRight size={17}/></button></div>}</>:<div className="map-empty"><div className="map-empty-icon"><GitBranch size={32}/></div><h3>이야기를 따라 선택지가 펼쳐져요</h3><p>가능한 방법과 다음 상황을 여기에 정리해요.</p><button onClick={()=>onFillInput('')}>내 상황 이야기하기 <ArrowRight size={17}/></button></div>}</div>
+         {busy&&!current.nodes.length?<MapSkeleton/>:<><div className="graph-wrapper">{current.nodes.length>0?<>{mobile?<MobileRoadmap key={current.id} value={mapCase} selected={selected} onSelect={handleNodeSelect} onChat={onShowChat} busy={busy}/>:<div className="desktop-roadmap"><ReactFlowProvider key={current.id}><Canvas value={mapCase} selected={selected} focusId={focusId} busy={busy||Boolean(active?.intake)} onSelect={handleNodeSelect}/></ReactFlowProvider></div>}{!mobile&&flowIds.length>1&&<div className="map-flow-navigation" aria-label="절차별 지도 이동"><button disabled={flowPosition===0} onClick={()=>onFocusFlow(-1)} aria-label="이전 절차 보기"><ChevronRight size={16} className="flip-horizontal"/></button><span>절차와 결과 {flowPosition+1}/{flowIds.length}</span><button disabled={flowPosition===flowIds.length-1} onClick={()=>onFocusFlow(1)} aria-label="다음 절차 보기"><ArrowRight size={17}/></button></div>}</>:<div className="map-empty"><div className="map-empty-icon"><GitBranch size={32}/></div><h3>이야기를 따라 선택지가 펼쳐져요</h3><p>가능한 방법과 다음 상황을 여기에 정리해요.</p><button onClick={()=>onFillInput('')}>내 상황 이야기하기 <ArrowRight size={17}/></button></div>}</div>
          </>}
        </div>
       </div>
