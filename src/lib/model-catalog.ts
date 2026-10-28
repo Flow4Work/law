@@ -1,10 +1,12 @@
 import 'server-only';
+import {validateModelEndpoint} from './model-endpoint';
 
 export type CatalogModel={id:string;name:string};
 export function catalogEndpoint(provider:string,baseUrl:string){
   return provider==='opencode'?'https://opencode.ai/inference/v1/models':baseUrl+'/models';
 }
 export async function listProviderModels(provider:string,baseUrl:string,key:string):Promise<CatalogModel[]>{
+  await validateModelEndpoint(baseUrl);
   // Gemini's model directory uses the native ListModels response, while requests use OpenAI-compatible chat.
   if(provider==='gemini'){
     const models:CatalogModel[]=[];
@@ -13,7 +15,7 @@ export async function listProviderModels(provider:string,baseUrl:string,key:stri
       const url=new URL('https://generativelanguage.googleapis.com/v1beta/models');
       url.searchParams.set('pageSize','1000');
       if(pageToken)url.searchParams.set('pageToken',pageToken);
-      const response=await fetch(url,{headers:{'x-goog-api-key':key},signal:AbortSignal.timeout(12000),cache:'no-store'});
+      const response=await fetch(url,{headers:{'x-goog-api-key':key},signal:AbortSignal.timeout(12000),cache:'no-store',redirect:'error'});
       if(!response.ok){
         if([400,401,403].includes(response.status))throw new Error('Gemini API 키 또는 모델 조회 권한을 확인해주세요.');
         if(response.status===429)throw new Error('Gemini 모델 조회 한도를 초과했습니다. 잠시 후 다시 시도해주세요.');
@@ -35,7 +37,7 @@ export async function listProviderModels(provider:string,baseUrl:string,key:stri
   const response=await fetch(catalogEndpoint(provider,baseUrl),{
     headers:key?{Authorization:'Bearer '+key}:{},
     signal:AbortSignal.timeout(12000),
-    cache:'no-store'
+    cache:'no-store',redirect:'error'
   });
   if(!response.ok){
     if(response.status===401||response.status===403)throw new Error('모델 목록 조회 권한이 없습니다. API 키 또는 서비스 이용 권한을 확인해주세요.');

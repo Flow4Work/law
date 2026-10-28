@@ -4,6 +4,7 @@ import {createHash} from 'node:crypto';
 import {resolveProvider} from './models';
 import {RequestQueue,retryDelay} from './request-queue';
 import {classifyModelFailure} from './model-failures';
+import {validateModelEndpoint} from './model-endpoint';
 export type AIProgress={phase:string;message:string;retryIn?:number};
 type Context={modelId?:string;signal?:AbortSignal;onProgress?:(event:AIProgress)=>void};
 const context=new AsyncLocalStorage<Context>();
@@ -15,6 +16,7 @@ const delay=(ms:number,signal?:AbortSignal)=>new Promise<void>((resolve,reject)=
 export async function requestAI(prompt:string,content:string,maxTokens=6000,options:{review?:boolean;json?:boolean}={}):Promise<string>{
  const scope=context.getStore();const cfg=await resolveProvider(scope?.modelId);
  const base=cfg.baseUrl.replace(/\/+$/,'');
+ await validateModelEndpoint(base);
  const responses=(cfg.provider==='opencode'||cfg.provider==='bai')&&/^gpt-/i.test(cfg.model);
  const url=base+(responses?'/responses':'/chat/completions');
  const messages=[{role:'system',content:prompt},{role:'user',content}];
@@ -33,7 +35,7 @@ export async function requestAI(prompt:string,content:string,maxTokens=6000,opti
    const timeout=AbortSignal.timeout(effort==='high'||effort==='max'?210000:150000);
    const signal=scope?.signal?AbortSignal.any([scope.signal,timeout]):timeout;
    let response:Response;
-   try{response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json',...(cfg.key?{Authorization:'Bearer '+cfg.key}:{}),...(cfg.provider==='openrouter'?{'X-Title':'Legal Roadmap'}:{})},body:JSON.stringify(body),signal,cache:'no-store'})}
+   try{response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json',...(cfg.key?{Authorization:'Bearer '+cfg.key}:{}),...(cfg.provider==='openrouter'?{'X-Title':'Legal Roadmap'}:{})},body:JSON.stringify(body),signal,cache:'no-store',redirect:'error'})}
    catch{if(scope?.signal?.aborted)throw new Error(scope.signal.reason?.name==='TimeoutError'?'모델 응답이 오래 걸리고 있어요. 다시 시도하거나 다른 모델을 선택해주세요.':'요청을 취소했어요.');throw new Error(timeout.aborted?'모델 응답이 오래 걸리고 있어요. 다시 시도하거나 다른 모델을 선택해주세요.':'모델 서버에 연결하지 못했어요. 연결 설정과 서버 상태를 확인해주세요.')}
    const json=await response.json().catch(()=>({}));
    if(!response.ok){

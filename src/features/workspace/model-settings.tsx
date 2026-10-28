@@ -80,7 +80,7 @@ export function ModelSettings({inventory,currentModelId,initialProvider,onClose,
 
  const models=inventory?.models||[];
  const current=models.find(m=>m.id===currentModelId)||models.find(m=>m.id===inventory?.defaultId)||models[0];
- const manageConnections=Array.from(new Map(models.map(m=>[connectionRoot(m),m])).values());
+ const manageConnections=Array.from(new Map(models.filter(m=>m.editable!==false).map(m=>[connectionRoot(m),m])).values());
  const connections=manageConnections.filter(m=>m.available);
  const chosenConnection=connections.find(m=>connectionRoot(m)===connectionId)||connections[0];
  const isReuse=mode==='reuse'&&Boolean(chosenConnection);
@@ -126,7 +126,7 @@ export function ModelSettings({inventory,currentModelId,initialProvider,onClose,
   try{
    const entry=(connectionCatalog[root]||[]).find(item=>item.id===connectionSelected);
    if(!entry)throw new Error('목록에서 모델을 선택해주세요.');
-   const response=await fetch('/api/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({connectionId:model.id,model:entry.id,name:entry.name,...(root.startsWith('saved:')?{replaceId:root}:{})})});
+   const response=await fetch('/api/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({connectionId:model.id,model:entry.id,name:entry.name,...(/^(saved|visitor):/.test(root)?{replaceId:root}:{})})});
    const data:ModelInventory&{id?:string;error?:string}=await response.json();
    if(!response.ok)throw new Error(data.error||'모델을 변경하지 못했습니다.');
    const match=data.models.find(item=>(item.id===data.id||item.id.startsWith(data.id+':'))&&item.model===entry.id);
@@ -228,6 +228,7 @@ export function ModelSettings({inventory,currentModelId,initialProvider,onClose,
    {!readOnly&&<button type="button" id="lm-tab-manage" role="tab" aria-controls="lm-panel-manage" aria-selected={tab!=='select'} tabIndex={tab!=='select'?0:-1} disabled={action!==null} onClick={()=>swapTab('manage')}>API 연결 <span>{manageConnections.length}</span></button>}
   </div>
   <div className="lm-body">
+   {inventory?.browserScoped&&<p className="lm-notification">누구나 내 API 키를 추가할 수 있어요. 개인 연결은 이 브라우저에 암호화해 30일간 보관되며, 다른 방문자에게 보이지 않아요.</p>}
    {readOnly&&<p className="lm-notification">AI 연결은 운영자가 관리해요. 모델 선택은 이 브라우저에만 적용돼요.</p>}
    {error&&<p role="alert" className="lm-notification lm-error">{error}</p>}
    {notice&&<p role="status" className="lm-notification"><CircleCheck size={15}/>{notice}</p>}
@@ -247,7 +248,7 @@ export function ModelSettings({inventory,currentModelId,initialProvider,onClose,
        {m.id===current?.id&&<span className="lm-in-use">사용 중</span>}
       </button>
       <button type="button" className="lm-test" disabled={!m.available||action!==null||testing!==null} aria-label={m.name+' 응답 확인'} title="모델 응답 확인" onClick={()=>test(m.id)}>{testing===m.id?<LoaderCircle className="spin" size={15}/>:<RefreshCw size={15}/>}</button>
-      {!readOnly&&<button type="button" className="lm-model-remove" disabled={action!==null} aria-label={m.name+' 모델 삭제'} title="모델 삭제" onClick={()=>{setModelDeletePending(m.id);setError('');setNotice('')}}><Trash2 size={15}/></button>}
+      {!readOnly&&m.editable!==false&&<button type="button" className="lm-model-remove" disabled={action!==null} aria-label={m.name+' 모델 삭제'} title="모델 삭제" onClick={()=>{setModelDeletePending(m.id);setError('');setNotice('')}}><Trash2 size={15}/></button>}
       {testResults[m.id]&&<div className={'lm-test-result '+(testResults[m.id].startsWith('짧은 API 응답 정상')?'lm-test-ok':'')} role="status">{testResults[m.id]}</div>}
       {!m.available&&m.reason&&<div className="lm-test-result" role="status">{m.reason}</div>}
       {modelDeletePending===m.id&&<div className="lm-model-delete-confirm" role="group" aria-label={m.name+' 삭제 확인'}>
@@ -301,11 +302,11 @@ export function ModelSettings({inventory,currentModelId,initialProvider,onClose,
      <button type="button" className="lm-back" onClick={()=>swapTab('manage')}><ArrowLeft size={15}/> 연결 목록</button>
      <div className="lm-step-title"><strong>서비스 선택</strong></div>
      <div className="lm-service-list" aria-label="API 서비스" onKeyDown={arrowKeys}>
-      {services.map(s=><button key={s.id} type="button" className={'lm-service '+(s.id===provider?'lm-service-active':'')} aria-pressed={provider===s.id} disabled={action!==null} onClick={()=>swapProvider(s.id)}>
+      {services.filter(s=>!inventory?.browserScoped||s.id!=='local').map(s=><button key={s.id} type="button" className={'lm-service '+(s.id===provider?'lm-service-active':'')} aria-pressed={provider===s.id} disabled={action!==null} onClick={()=>swapProvider(s.id)}>
        <span><strong>{s.label}</strong><small>{s.caption}</small></span>{s.id===provider&&<Check size={15}/>}
       </button>)}
      </div>
-     <div className="lm-left-note"><ShieldCheck size={14}/>API 키는 서버에 암호화해 저장합니다.</div>
+     <div className="lm-left-note"><ShieldCheck size={14}/>{inventory?.browserScoped?'내 API 키는 이 브라우저에 암호화해 보관합니다.':'API 키는 서버에 암호화해 저장합니다.'}</div>
     </div>
     <div className="lm-add-right">
      <div className="lm-step-title"><strong>{catalogLoaded?'사용할 모델 선택':'API 키 연결'}</strong></div>

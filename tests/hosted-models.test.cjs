@@ -6,18 +6,22 @@ const vm=require('node:vm');
 const ts=require('typescript');
 const source=fs.readFileSync(path.join(__dirname,'../src/lib/models.ts'),'utf8');
 const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
-function load(raw){
+function load(raw,options={}){
  const calls=[];
  const exports={};
+ const sessions=new Map();let visitor='a';
+ const session=()=>sessions.get(visitor)||{connections:[],hiddenModels:[]};
  const fail=async()=>{calls.push('local IO');throw Error('Hosted connections must not use local IO')};
- vm.runInNewContext(compiled,{exports,require:id=>id==='server-only'?{}:id==='node:fs/promises'?{readFile:fail,writeFile:fail,mkdir:fail}:id==='./model-catalog'?{listProviderModels:fail}:require(id),process:{cwd:()=>'/app',env:{VERCEL:'1',LEGAL_MODEL_CONNECTIONS:raw}},console:{warn(){}},URL,Buffer,AbortSignal,fetch:fail,Date});
- return {api:exports,calls};
+ vm.runInNewContext(compiled,{exports,require:id=>id==='server-only'?{}:id==='node:fs/promises'?{readFile:fail,writeFile:fail,mkdir:fail}:id==='./visitor-model-session'?{readVisitorModels:async()=>session(),writeVisitorModels:async value=>sessions.set(visitor,JSON.parse(JSON.stringify(value)))}:id==='./model-catalog'?{listProviderModels:async()=>options.catalog||[{id:'test-model',name:'Test Model'}]}:require(id),process:{cwd:()=>'/app',env:{VERCEL:'1',LEGAL_MODEL_CONNECTIONS:raw,...options.env}},console:{warn(){}},URL,Buffer,AbortSignal,fetch:fail,Date});
+ return {api:exports,calls,visitor:id=>{visitor=id}};
 }
 const cloud={id:'env:cloud',name:'Cloud',provider:'openrouter',model:'test-model',baseUrl:'https://example.com/v1',key:'test-secret'};
 test('hosted inventory keeps cloud models without reading files or probing loopback',async()=>{
  const {api,calls}=load(JSON.stringify([cloud]));
  const inventory=await api.getModelInventory(true);
- assert.equal(inventory.readOnly,true);
+ assert.equal(inventory.readOnly,false);
+ assert.equal(inventory.browserScoped,true);
+ assert.equal(inventory.models[0].editable,false);
  assert.equal(inventory.models.length,1);
  assert.equal(inventory.defaultId,cloud.id);
  assert.equal(inventory.models[0].available,true);
@@ -26,12 +30,41 @@ test('hosted inventory keeps cloud models without reading files or probing loopb
  assert.equal((await api.resolveProvider(cloud.id)).key,'test-secret');
  assert.deepEqual(calls,[]);
 });
-test('public connection mutations fail before any file or network operation',async()=>{
+test('public visitors cannot mutate the shared operator connections',async()=>{
  const {api,calls}=load(JSON.stringify([cloud]));
- await assert.rejects(api.saveConnection({}),/운영자/);
- await assert.rejects(api.deleteConnection(cloud.id),/운영자/);
- await assert.rejects(api.deleteModel(cloud.id),/운영자/);
+ await assert.rejects(api.saveConnection({connectionId:cloud.id}),/공용/);
+ await assert.rejects(api.deleteConnection(cloud.id),/공용/);
+ await assert.rejects(api.deleteModel(cloud.id),/공용/);
  assert.deepEqual(calls,[]);
+});
+test('visitors add, reload, use, replace and delete only their own private connections',async()=>{
+ const {api,calls,visitor}=load(JSON.stringify([cloud]));
+ const id=await api.saveConnection({provider:'custom',key:'visitor-key',baseUrl:'https://example.com/v1',model:'test-model',name:'My Model'});
+ assert.match(id,/^visitor:/);
+ const inventory=await api.getModelInventory();
+ assert.equal(inventory.models.length,2);
+ assert.equal(inventory.models.find(m=>m.id===id).editable,true);
+ assert(!JSON.stringify(inventory).includes('visitor-key'));
+ assert.equal((await api.resolveProvider(id)).key,'visitor-key');
+ visitor('b');
+ assert.equal((await api.getModelInventory()).models.length,1);
+ await assert.rejects(api.resolveProvider(id));
+ await assert.rejects(api.deleteConnection(id));
+ visitor('a');
+ assert.equal(await api.saveConnection({connectionId:id,replaceId:id,model:'test-model',name:'Renamed'}),id);
+ assert.equal((await api.resolveProvider(id)).name,'Renamed');
+ await api.deleteModel(id);
+ assert.equal((await api.getModelInventory()).models.length,1);
+ assert.deepEqual(calls,[]);
+});
+test('B.AI discovers models from the existing b_ai Vercel variable',async()=>{
+ const {api}=load('',{env:{b_ai:'test-bai-key'},catalog:[{id:'test-model',name:'Test Model'},{id:'test-image',name:'Image'}]});
+ const inventory=await api.getModelInventory();
+ assert.equal(inventory.models.length,1);
+ assert.equal(inventory.models[0].provider,'bai');
+ assert.equal(inventory.models[0].model,'test-model');
+ assert.equal((await api.resolveProvider(inventory.models[0].id)).key,'test-bai-key');
+ assert(!JSON.stringify(inventory).includes('test-bai-key'));
 });
 test('hosted runtime excludes local providers and tolerates absent or malformed configuration',async()=>{
  for(const raw of ['', '{invalid', '{}',JSON.stringify([{...cloud,provider:'local',baseUrl:'http://127.0.0.1:11434/v1'},{...cloud,id:'env:loopback',baseUrl:'http://localhost:1234/v1'},null])]){
