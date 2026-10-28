@@ -41,7 +41,7 @@ test('Seoul postcode evidence takes priority over approximate IP coordinates and
  assert.equal(seoulPostalDistrict('06090'),'강남구');assert.equal(seoulPostalDistrict('04524'),'중구');
  for(const value of ['6090','99999','00000','06400','04524evil',''])assert.equal(seoulPostalDistrict(value),'');
  const header=new Headers({'x-vercel-forwarded-for':'203.0.113.1','x-vercel-ip-country':'KR','x-vercel-ip-country-region':'11','x-vercel-ip-city':'Seoul','x-vercel-ip-postal-code':'06090','x-vercel-ip-latitude':'37.5638','x-vercel-ip-longitude':'126.9976'});
- const value=activityLocation(header);assert.equal(value.district,'강남구');assert.equal(value.districtSource,'ip-postal');assert(value.locationNote.includes('서로 다릅니다'));
+ const value=activityLocation(header);assert.equal(value.district,'강남구');assert.equal(value.districtSource,'ip-postal');assert(value.locationNote.includes('서로 다릅니다'));assert(value.locationNote.includes('우편번호 강남구'));assert(value.locationNote.includes('대표좌표 중구'));
  assert.equal('latitude' in value,false);assert.equal('longitude' in value,false);assert.equal('postalCode' in value,false);
  header.set('x-vercel-ip-country','US');assert.equal(activityLocation(header).district,'');
  header.set('x-vercel-ip-country','KR');header.set('x-vercel-ip-country-region','26');header.set('x-vercel-ip-city','Busan');assert.equal(activityLocation(header).district,'');

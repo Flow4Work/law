@@ -64,7 +64,10 @@ export function activityLocation(headers:Headers){
   if(named){district=named;districtSource='ip-city'}
   else if(postalDistrict){district=postalDistrict;districtSource='ip-postal'}
   else if(pointDistrict){district=pointDistrict;districtSource='ip-coordinate'}
-  if(new Set([named,postalDistrict,pointDistrict].filter(Boolean)).size>1)locationNote='IP 위치 근거의 구가 서로 다릅니다. 실제 위치 확인이 필요합니다.';
+  if(new Set([named,postalDistrict,pointDistrict].filter(Boolean)).size>1){
+   const evidence=[named&&`도시명 ${named}`,postalDistrict&&`우편번호 ${postalDistrict}`,pointDistrict&&`대표좌표 ${pointDistrict}`].filter(Boolean).join(' · ');
+   locationNote=evidence+' — 구가 서로 다릅니다. 실제 위치 확인이 필요합니다.';
+  }
   if(!district)locationNote='이 IP에는 구를 판별할 세부 위치 정보가 없습니다.';
  }
  const city=seoul?'서울특별시':sourceCity;
