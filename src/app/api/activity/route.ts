@@ -1,4 +1,3 @@
-import {after} from 'next/server';
 import {randomUUID} from 'node:crypto';
 import {ACTIVITY_LABELS,type ActivityAction} from '@/lib/activity-types';
 import {activityLocation} from '@/lib/activity-location';
@@ -16,6 +15,6 @@ export async function POST(request:Request){
  let body;try{const text=await request.text();if(text.length>2000)return new Response(null,{status:413});body=JSON.parse(text)}catch{return new Response(null,{status:400})}
  if(!body||typeof body.action!=='string'||!Object.hasOwn(ACTIVITY_LABELS,body.action))return new Response(null,{status:400});
  const event={id:randomUUID(),at:new Date().toISOString(),...location,action:body.action as ActivityAction,detail:typeof body.detail==='string'?body.detail.trim().slice(0,400):''};
- after(async()=>{try{await appendActivity(event)}catch{console.warn('[private-activity] Storage write failed')}});
+ try{await appendActivity(event)}catch{console.warn('[private-activity] Storage write failed');return new Response(null,{status:503,headers:{'Cache-Control':'no-store'}})}
  return new Response(null,{status:204,headers:{'Cache-Control':'no-store'}});
 }
