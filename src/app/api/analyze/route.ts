@@ -37,7 +37,7 @@ export async function POST(request:Request){
    today:new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'}),refresh:body.refresh===true};
   const preliminaryQueries=preliminaryLawQueries(userText);
   const preliminarySearch=preliminaryQueries.length?fetchLegalSources({laws:preliminaryQueries,precedents:[]}):null;
-  const rawDraft=await requestObject(fastMapPrompt,JSON.stringify(context),2500);
+  const rawDraft=await requestObject(fastMapPrompt,JSON.stringify(context),4800);
   notify({phase:'sources',message:'관련 법령과 연결된 공식 안내를 확인하고 있어요.'});
   const preliminary=preliminarySearch?await preliminarySearch:{sources:[],texts:[],checked:false};
   const modelLaws=strings(rawDraft.sourceQueries?.laws,4,80);
@@ -64,7 +64,7 @@ export async function POST(request:Request){
   const issues=[...structuralIssues,...strings(review.issues,6,600)];
   generated=normalizeAnalysis(applyReview(rawDraft,review),previous,sources);
   const reviewHasChanges=review.nodeUpdates?.length||review.removeNodeIds?.length||review.addNodes?.length||Array.isArray(review.edges)||typeof review.answer==='string'||Array.isArray(review.options)||typeof review.question==='string'||Array.isArray(review.openQuestions)||Array.isArray(review.followUpQuestions);
-  if(findAnalysisIssues(generated,userText).length||(issues.length&&!reviewHasChanges)){generated=normalizeAnalysis(await requestObject(fastMapPrompt,JSON.stringify({...context,draft:generated,correctionsRequired:issues}),2500),previous,sources)}
+  if(findAnalysisIssues(generated,userText).length||(issues.length&&!reviewHasChanges)){generated=normalizeAnalysis(await requestObject(fastMapPrompt,JSON.stringify({...context,draft:generated,correctionsRequired:issues}),4800),previous,sources)}
   const remaining=findAnalysisIssues(generated,userText);
   if(remaining.length)throw new Error('안내할 기관이나 절차에 확인할 내용이 남아 있어요. 통지서 종류나 사건 진행 상황을 더 알려주거나 다시 정리해 주세요.');
   if(!generated.nodes.length||!generated.answer)throw new Error('선택지를 완성하지 못했어요. 다시 정리해 주세요.');

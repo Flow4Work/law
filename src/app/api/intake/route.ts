@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {requestObject,withAIContext} from '@/lib/provider';
-import {normalizeIntake,type IntakePlan,type IntakeAnswer,type IntakeQuestion} from '@/lib/intake';
+import {MAX_INTAKE_ROUTES,normalizeIntake,type IntakePlan,type IntakeAnswer,type IntakeQuestion} from '@/lib/intake';
 import {INTAKE_INTERVIEW_PROMPT,legalIntakeContext} from '@/lib/intake-strategy';
 
 export const runtime='nodejs';
@@ -23,7 +23,7 @@ function readPlan(value:unknown,original:string):IntakePlan|undefined{
  });
  return {
   original,questions,answers,
-  routes:(Array.isArray(raw.routes)?raw.routes:[]).slice(0,3).flatMap((r:unknown)=>{
+  routes:(Array.isArray(raw.routes)?raw.routes:[]).slice(0,MAX_INTAKE_ROUTES).flatMap((r:unknown)=>{
    const x=r&&typeof r==='object'?r as Record<string,unknown>:{};
    const title=cap(x.title,75),description=cap(x.description,260);
    return title&&description?[{title,description,excludeWhen:[]}]:[];

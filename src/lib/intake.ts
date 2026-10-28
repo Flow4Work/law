@@ -1,5 +1,6 @@
 import type {LegalAnswer,LegalCase,RoadmapEdge,RoadmapNode} from './types';
 
+export const MAX_INTAKE_ROUTES=8; // Safety ceiling, never a target or a fixed number of choices.
 export type IntakeQuestion={question:string;choices:string[];why?:string};
 export type IntakeRoute={title:string;description:string;excludeWhen?:{questionIndex:number;choiceIndex:number}[]};
 export type IntakeAnswer={choice:string;detail:string};
@@ -132,7 +133,7 @@ export function normalizeIntake(raw:unknown,original:string,prior?:IntakePlan):I
  const policeOnly=/불송치/.test(original)&&!/불기소/.test(original);
  const enforced=/승소|판결|강제집행|압류/.test(original);
  const digital=/가상자산|코인|토큰|FANC|이전청구권|반환청구권/.test(original);
- const routes=rawRoutes.slice(0,3).flatMap(entry=>{
+ const routes=rawRoutes.slice(0,MAX_INTAKE_ROUTES).flatMap(entry=>{
   if(!entry||typeof entry!=='object')return [];
   const item=entry as Record<string,unknown>;
   const title=str(item.title,75),description=str(item.description,260);
@@ -159,7 +160,7 @@ export function previewIntake(plan:IntakePlan):Pick<LegalCase,'nodes'|'edges'>{
   id:'intake-situation',title:'현재 상황',description:plan.original.slice(0,230),status:'current',kind:'situation',
   conditions:[],actions:[],documents:[],cost:'',duration:'',risks:[],sourceIds:[],next:[]
  };
- const nodes:RoadmapNode[]=[root,...plan.routes.slice(0,3).map((route,index)=>({
+ const nodes:RoadmapNode[]=[root,...plan.routes.slice(0,MAX_INTAKE_ROUTES).map((route,index)=>({
   id:'intake-route-'+index,title:route.title,description:route.description,
   status:'verify' as const,kind:'route' as const,
   conditions:['추가 사실 및 법적 근거 확인 전이에요.'],actions:[],documents:[],cost:'',duration:'',risks:[],sourceIds:[],next:[]

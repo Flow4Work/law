@@ -15,4 +15,20 @@ const n=normalizeIntake(fake('퇴사 후 몇 주 지났나요?',['1주일 이내
 assert.equal(n.questions[0].choices.length,0);
 const k=normalizeIntake(fake('불송치 이유가 무엇인가요?',[],[{title:'검찰 불기소 처분 항고',description:'검찰 불기소에 항고'},{title:'불송치 이의신청 검토',description:'결정문 검토'}]),'경찰 불송치 통지를 받았어요.');
 assert(!k.routes.some(r=>r.title.includes('검찰 불기소')));
-console.log('PASS: non-repeated stages, two-question completion, date free text, criminal route filter');
+const {previewIntake,MAX_INTAKE_ROUTES}=m.exports;
+for(const count of [1,2,3,4,6,8]){
+ const routes=Array.from({length:count},(_,i)=>({title:'서로 다른 경로 '+(i+1),description:'해당 사건에 맞는 독립적인 대응 방법이에요.'}));
+ const plan=normalizeIntake(fake('현재 진행 단계는 어디인가요?',[],routes),'여러 해결 방법을 비교하고 싶어요.');
+ assert.equal(plan.routes.length,count,'normalization must retain '+count+' routes');
+ const preview=previewIntake(plan);
+ assert.equal(preview.nodes.length,count+1,'preview must show all '+count+' routes');
+ assert.equal(preview.edges.length,count,'each route must remain connected');
+}
+const overflow=Array.from({length:MAX_INTAKE_ROUTES+2},(_,i)=>({title:'경로 '+i,description:'독립적인 절차'}));
+const bounded=normalizeIntake(fake('어떤 단계인가요?',[],overflow),'여러 대응');
+assert.equal(bounded.routes.length,MAX_INTAKE_ROUTES,'protect against excessive results without defaulting to three');
+const routeHandler=fs.readFileSync(path.join(__dirname,'../src/app/api/intake/route.ts'),'utf8');
+assert.match(routeHandler,/routes:\s*\(Array\.isArray\(raw\.routes\).*?\)\.slice\(0,MAX_INTAKE_ROUTES\)/);
+const prompt=fs.readFileSync(path.join(__dirname,'../src/lib/intake-strategy.ts'),'utf8');
+assert(!/routes는[^\n]+최대 3개/.test(prompt),'AI must not be told to choose exactly three');
+console.log('PASS: non-repeated questions, variable route counts 1/2/3/4/6/8, preview graph and safety cap');
