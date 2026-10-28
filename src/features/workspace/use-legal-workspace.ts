@@ -409,7 +409,7 @@ export function useLegalWorkspace(){
      if(requestAbort.current===controller){requestAbort.current=null;busyRef.current=false;setBusy(false)}
    }
  };
- const fallbackRank=(provider:string,model:string,effort?:string)=>provider==='bai'&&model==='minimax-m3.1-flash'?0:provider==='glm'&&/flash/i.test(model)?1:provider==='glm'&&effort==='low'?2:provider==='glm'?3:provider==='bai'&&model==='gpt-6-luna'?4:5;
+ const fallbackRank=(provider:string,model:string,effort?:string)=>provider==='bai'&&model==='gpt-6-luna'?0:provider==='glm'&&/flash/i.test(model)?1:provider==='glm'&&effort==='low'?2:provider==='glm'?3:provider==='bai'&&model==='minimax-m3.1-flash'?4:5;
  const alternativeModel=inventory?.models.filter(model=>model.available&&model.id!==chosenModelId).sort((a,b)=>fallbackRank(a.provider,a.model,a.effort)-fallbackRank(b.provider,b.model,b.effort))[0];
  const retryWithAlternative=()=>{if(!alternativeModel)return;setPreferredModel(alternativeModel.id);if(active)setCases(values=>values.map(value=>value.id===active.id?{...value,modelId:alternativeModel.id}:value));void submit(undefined,true,alternativeModel.id)};
  const example=()=>{setSelected(null);setHistoryOpen(false);setActiveId(null);if(captureMode.current){setPreviewCase(structuredClone(demo));setFocusId(null);setChatCollapsed(true)}};

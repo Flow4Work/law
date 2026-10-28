@@ -9,7 +9,14 @@ const {conciseSummary,validSummaryLines,procedureName,detailHeadline,supplementa
 const {roadmapCardSummary,roadmapCardDisplaySummary,roadmapParallelNote,routeKeyword,roadmapCardFooter}=load('roadmap-card-copy');
 const {normalizeAnalysis}=load('analysis');
 const {nodeDuration,scenarioTiming}=load('legal-copy');
-const {selectedModelId}=load('model-selection');
+const {selectedModelId,composerModelLabel}=load('model-selection');
+test('composer names the actually selected model rather than showing AI',()=>{
+ assert.equal(composerModelLabel({provider:'bai',model:'gpt-6-luna'}),'GPT');
+ assert.equal(composerModelLabel({provider:'glm',model:'glm-5.3'}),'GLM');
+ assert.equal(composerModelLabel({provider:'glm',model:'glm-5.3-flash'}),'GLM');
+ assert.equal(composerModelLabel({provider:'bai',model:'minimax-m3.1-flash'}),'MiniMax');
+ assert.equal(composerModelLabel({provider:'openrouter',model:'google/gemma-4-31b-it:free'}),'Gemma');
+});
 
 test('long saved method descriptions become two simple sentences while preserving full detail',()=>{
  const description='계좌 압류로 돈을 찾지 못했을 때, 법원에 신청해 채무자가 자기 재산을 목록으로 밝히도록 하는 절차예요. 이미 승소 판결이나 확정 지급명령 같은 집행 근거가 있으니 이 단계를 바로 진행할 수 있어요. 밝혀진 재산이 있으면 그 재산에 다시 압류를 신청해요.';

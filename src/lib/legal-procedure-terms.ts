@@ -35,7 +35,12 @@ function particleFor(text:string,particle:string):string {
 }
 export function normalizeLegalProcedureTerms(value:string,context=value):string {
  if(!value)return value;
- const spaced=value.replace(/재산\s+명시/g,'재산명시').replace(/재산\s+조회/g,'재산조회');
+ // LLMs occasionally attach English negation fragments to Korean rent-deposit titles.
+ // Repair only this known malformed pattern; preserve meaningful legal acronyms elsewhere.
+ const cleaned=value
+  .replace(/보증금\s*반환\s*(?:E?N[O0])(?=$|[^A-Za-z0-9])/gi,'보증금 반환 요구')
+  .replace(/임대인에게\s*보증금\s*(?:을\s*)?반환하고/g,'임대인에게 보증금 반환을 요구하고');
+ const spaced=cleaned.replace(/재산\s+명시/g,'재산명시').replace(/재산\s+조회/g,'재산조회');
  return spaced.replace(
   /재산\s*([가-힣]{2})(으로|로|을|를|은|는|이|가|과|와|의)?(?=[\s.,!?…()·/]|$|신청|절차|진행|명령|요청|하기|하다)/g,
   (match,ending:string,particle:string|undefined)=>{
@@ -146,8 +151,11 @@ export function normalizeSavedRoadmapTerms(value:LegalCase):LegalCase {
  const progress={...(value.progress||{})};
  const nodes=value.nodes.map((node:RoadmapNode)=>{
   const title=normalizeProcedureTitle(node.title);
-  if(!node.scenario)return {...node,title};
-  const steps=node.scenario.steps.map(step=>({...step,title:normalizeProcedureTitle(step.title)}));
+  const description=normalizeLegalProcedureTerms(node.description||'');
+  const summaryLines=node.summaryLines?.map(line=>normalizeLegalProcedureTerms(line));
+  if(!node.scenario)return {...node,title,description,summaryLines};
+  const steps=node.scenario.steps.map(step=>({...step,title:normalizeProcedureTitle(step.title),description:normalizeLegalProcedureTerms(step.description||'')}));
+  const outcomes=node.scenario.outcomes.map(outcome=>({...outcome,title:normalizeProcedureTitle(outcome.title),description:normalizeLegalProcedureTerms(outcome.description||''),nextSteps:outcome.nextSteps?.map(step=>({...step,title:normalizeProcedureTitle(step.title),description:normalizeLegalProcedureTerms(step.description||'')}))}));
   const removed=new Set([...duplicatedFilingSteps(steps,title),...redundantRouteStepIndices(steps,title)]);
   const oldToNew=new Map<number,number>();
   const kept=steps.filter((_,i)=>{
@@ -173,7 +181,7 @@ export function normalizeSavedRoadmapTerms(value:LegalCase):LegalCase {
   const scenarioRevealed=oldRevealed===undefined?undefined:Math.max(0,Math.min(kept.length+1,oldRevealed-removedRevealed));
   const oldIndex=node.scenarioIndex??0;
   const scenarioIndex=removed.size?Math.max(0,oldIndex-[...removed].filter(i=>i<=oldIndex).length):node.scenarioIndex;
-  return {...node,title,scenario:{...node.scenario,steps:kept},scenarioIndex,scenarioRevealed};
+  return {...node,title,description,summaryLines,scenario:{...node.scenario,steps:kept,outcomes},scenarioIndex,scenarioRevealed};
  });
  return {...value,nodes,progress};
 }

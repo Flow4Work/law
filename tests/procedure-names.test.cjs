@@ -8,6 +8,20 @@ const js=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{modul
 const moduleExports={};new Function('exports',js)(moduleExports);
 const {normalizeLegalProcedureTerms,normalizeProcedureTitle,procedureGroupTitle,procedureStepIssues,duplicatedFilingSteps,normalizeSavedRoadmapTerms}=moduleExports;
 const step=(title,description='내용')=>({title,description});
+test('deposit-return map uses natural Korean even for old malformed AI labels',()=>{
+ assert.equal(normalizeProcedureTitle('보증금 반환NO'),'보증금 반환 요구');
+ assert.equal(normalizeProcedureTitle('보증금 반환ENO'),'보증금 반환 요구');
+ assert.equal(normalizeLegalProcedureTerms('보증금 반환EN0'),'보증금 반환 요구');
+ assert.equal(normalizeProcedureTitle('보증금 반환소송 검토'),'보증금 반환소송 검토');
+ assert.equal(normalizeProcedureTitle('계좌 NO'),'계좌 NO');
+ const existing={nodes:[{id:'r1',title:'보증금 반환ENO',description:'임대인에게 보증금 반환하고 열쇠를 반환하는 절차를 검토합니다.',scenario:{steps:[step('보증금 반환NO')],outcomes:[{title:'보증금 반환ENO',description:'보증금 반환NO'}]}}]};
+ const normalized=normalizeSavedRoadmapTerms(existing);
+ assert.equal(normalized.nodes[0].title,'보증금 반환 요구');
+ assert.match(normalized.nodes[0].description,/임대인에게 보증금 반환을 요구하고/);
+ assert.equal(normalized.nodes[0].scenario.steps.length,0); // Repeated application is already the route.
+ assert.equal(normalized.nodes[0].scenario.outcomes[0].title,'보증금 반환 요구');
+ assert.equal(normalized.nodes[0].scenario.outcomes[0].description,'보증금 반환 요구');
+});
 test('repeated names fold, genuinely distinct legal procedures remain distinct',()=>{
  assert.equal(normalizeProcedureTitle('재산명시·재산명시 신청'),'재산명시 신청');
  assert.equal(procedureGroupTitle('재산명시·재산명시 신청'),'재산명시 신청 절차');

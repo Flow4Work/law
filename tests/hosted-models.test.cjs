@@ -57,26 +57,26 @@ test('visitors add, reload, use, replace and delete only their own private conne
  assert.equal((await api.getModelInventory()).models.length,1);
  assert.deepEqual(calls,[]);
 });
-test('B.AI exposes only approved models, prefers MiniMax, and rejects blocked choices',async()=>{
+test('B.AI exposes only approved models, prefers Luna, and rejects blocked choices',async()=>{
  const catalog=[{id:'claude-opus-5.5',name:'Claude Opus'},{id:'gpt-6-luna',name:'GPT-6 Luna'},{id:'minimax-m3.1-flash',name:'MiniMax M3.1 Flash'}];
  const {api}=load('',{env:{b_ai:'test-bai-key',BAI_MODEL:'claude-opus-5.5'},catalog});
  const inventory=await api.getModelInventory();
  assert.deepEqual(Array.from(inventory.models,m=>m.model),['minimax-m3.1-flash','gpt-6-luna']);
- assert.equal(inventory.defaultId,'env:bai:minimax-m3.1-flash');
+ assert.equal(inventory.defaultId,'env:bai:gpt-6-luna');
  assert.equal((await api.resolveProvider(inventory.defaultId)).key,'test-bai-key');
  await assert.rejects(api.resolveProvider('env:bai:claude-opus-5.5'),/선택한 모델의 연결을 확인/);
  await assert.rejects(api.saveConnection({provider:'bai',key:'test-bai-key',model:'claude-opus-5.5'}),/MiniMax M3.1 Flash/);
  assert(!JSON.stringify(inventory).includes('test-bai-key'));
 });
-test('fallback order is MiniMax, connected GLM, then GPT-6 Luna',async()=>{
+test('fallback order is GPT-6 Luna, connected GLM, then MiniMax',async()=>{
  const glm={...cloud,id:'env:glm',provider:'glm',model:'glm-5.3',isDefault:true};
  const catalog=[{id:'gpt-6-luna',name:'GPT-6 Luna'},{id:'minimax-m3.1-flash',name:'MiniMax M3.1 Flash'}];
  const withAll=load(JSON.stringify([glm]),{env:{b_ai:'bai-key'},catalog});
- assert.equal((await withAll.api.getModelInventory()).defaultId,'env:bai:minimax-m3.1-flash');
- const withoutMini=load(JSON.stringify([glm]),{env:{b_ai:'bai-key'},catalog:catalog.slice(0,1)});
- assert.equal((await withoutMini.api.getModelInventory()).defaultId,'env:glm:flash');
- const withoutGlm=load('',{env:{b_ai:'bai-key'},catalog:catalog.slice(0,1)});
- assert.equal((await withoutGlm.api.getModelInventory()).defaultId,'env:bai:gpt-6-luna');
+ assert.equal((await withAll.api.getModelInventory()).defaultId,'env:bai:gpt-6-luna');
+ const withoutLuna=load(JSON.stringify([glm]),{env:{b_ai:'bai-key'},catalog:catalog.slice(1)});
+ assert.equal((await withoutLuna.api.getModelInventory()).defaultId,'env:glm:flash');
+ const withoutGlm=load('',{env:{b_ai:'bai-key'},catalog:catalog.slice(1)});
+ assert.equal((await withoutGlm.api.getModelInventory()).defaultId,'env:bai:minimax-m3.1-flash');
 });
 test('hosted runtime excludes local providers and tolerates absent or malformed configuration',async()=>{
  for(const raw of ['', '{invalid', '{}',JSON.stringify([{...cloud,provider:'local',baseUrl:'http://127.0.0.1:11434/v1'},{...cloud,id:'env:loopback',baseUrl:'http://localhost:1234/v1'},null])]){

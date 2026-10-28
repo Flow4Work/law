@@ -3,7 +3,7 @@
 import {Check,ChevronDown,SlidersHorizontal,Search,Plus} from 'lucide-react';
 import {useEffect,useId,useLayoutEffect,useRef,useState} from 'react';
 import type {ModelInventory} from '@/lib/model-types';
-import {providerName} from '@/lib/model-selection';
+import {composerModelLabel,providerName} from '@/lib/model-selection';
 
 type Props={
   inventory:ModelInventory|null;
@@ -23,6 +23,7 @@ export function ModelPicker({inventory,value,disabled=false,onChange,onManage}:P
   const id=useId();
   const models=inventory?.models||[];
   const current=models.find(model=>model.id===value);
+  const shortLabel=composerModelLabel(current);
   const filtered=models.filter(model=>(model.name+' '+model.model+' '+providerName(model.provider)).toLowerCase().includes(query.trim().toLowerCase()));
   const groups=Array.from(new Set(filtered.map(model=>providerName(model.provider))));
   const close=()=>{setOpen(false);trigger.current?.focus()};
@@ -85,7 +86,7 @@ export function ModelPicker({inventory,value,disabled=false,onChange,onManage}:P
     options[next].focus();
   }}>
     <button ref={trigger} className="model-picker-trigger" type="button" aria-label={'답변 모델 선택'+(current?.name?': '+current.name:'')} title={current?.name||'답변 모델 선택'} aria-haspopup="dialog" aria-controls={id} aria-expanded={open} disabled={disabled} onClick={()=>setOpen(value=>!value)}>
-      <span className="model-picker-label" aria-hidden="true">AI</span>
+      <span className="model-picker-label" aria-hidden="true">{shortLabel}</span>
       <ChevronDown className={open?'is-open':''} size={12} aria-hidden="true"/>
     </button>
     <button className="model-settings-trigger" type="button" aria-label="모델 연결과 관리" title="모델 연결과 관리" disabled={disabled} onClick={onManage}><SlidersHorizontal size={17}/></button>

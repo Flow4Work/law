@@ -114,11 +114,11 @@ export async function allProviders(refresh=false){
 }
 function chooseFast(configs:ProviderConfig[]):ProviderConfig|undefined{
  const available=configs.filter(m=>m.available);
- return available.find(m=>m.provider==='bai'&&m.model==='minimax-m3.1-flash')
+ return available.find(m=>m.provider==='bai'&&m.model==='gpt-6-luna')
   ||available.find(m=>m.provider==='glm'&&/flash/i.test(m.model))
   ||available.find(m=>m.provider==='glm'&&m.effort==='low')
   ||available.find(m=>m.provider==='glm')
-  ||available.find(m=>m.provider==='bai'&&m.model==='gpt-6-luna')
+  ||available.find(m=>m.provider==='bai'&&m.model==='minimax-m3.1-flash')
   ||available.find(m=>/flash|mini|haiku|turbo|small/i.test(m.model)&&m.effort!=='high')
   ||available.find(m=>m.effort==='low')
   ||available.find(m=>m.isDefault)
