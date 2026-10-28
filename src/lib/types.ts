@@ -59,7 +59,7 @@ export type DetailSupplement={
 export type LegalCase = {
   id:string; name:string; updatedAt:string; createdAt:string; messages:Message[];
   facts:string[]; nodes:RoadmapNode[]; edges:RoadmapEdge[]; sources:LegalSource[];
-  evidenceStatus:'verified'|'unverified'|'partial'; lastChecked?:string; demo?:boolean; examplePreset?:'wage-fast';
+  evidenceStatus:'verified'|'unverified'|'partial'; lastChecked?:string; demo?:boolean; examplePreset?:'wage-fast'|'deposit-fast'|'police-fast';
   progress?:Record<string,NodeStatus>; pendingNextFrom?:string;
   /** 펼쳐진 하위 절차의 준비 정보는 지도 원본을 변경하지 않고 별도로 보관합니다. */
   detailSupplements?:Record<string,DetailSupplement>;

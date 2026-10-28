@@ -6,7 +6,7 @@ import {ANALYSIS_VERSION} from '@/lib/analysis';
 import {CIVIL_DEMO} from '@/lib/civil-demo';
 import {isPortfolioCapture} from '@/lib/portfolio-capture';
 import {SHOWCASE_STORY,SHOWCASE_DURATIONS,SHOWCASE_SCENES,showcaseCase,showcasePhase} from '@/lib/portfolio-showcase';
-import {WAGE_EXAMPLE_DELAY_MS,wageExamplePlan,nextWageExamplePlan,wageExampleResult} from '@/lib/wage-example-fast';
+import {EXAMPLE_DELAY_MS,presetForStory,examplePlan,nextExamplePlan,exampleResult,type ExamplePreset} from '@/lib/example-fast';
 import {limitCaseTitle,summarizeCaseTitle} from '@/lib/case-title';
 import {expandRoadmap,revealedCount} from '@/lib/scenario-graph';
 import {normalizeSavedRoadmapTerms} from '@/lib/legal-procedure-terms';
@@ -25,10 +25,10 @@ const THEMESTORE='ai-legal-roadmap-theme-v3';
 const AUTO_FOLD_KEY='ai-legal-roadmap-auto-folded-v1';
 const blank=():LegalCase=>({id:crypto.randomUUID(),name:'새 대화',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),messages:[],nodes:[],edges:[],facts:[],sources:[],evidenceStatus:'unverified'});
 const demo:LegalCase=CIVIL_DEMO;
-const waitWageExample=(signal:AbortSignal)=>new Promise<void>((resolve,reject)=>{
+const waitFastExample=(signal:AbortSignal)=>new Promise<void>((resolve,reject)=>{
  if(signal.aborted){reject(new Error('cancelled'));return}
  const onAbort=()=>{clearTimeout(timer);reject(new Error('cancelled'))};
- const timer=setTimeout(()=>{signal.removeEventListener('abort',onAbort);resolve()},WAGE_EXAMPLE_DELAY_MS);
+ const timer=setTimeout(()=>{signal.removeEventListener('abort',onAbort);resolve()},EXAMPLE_DELAY_MS);
  signal.addEventListener('abort',onAbort,{once:true});
 });
 const shortCaseTitle=limitCaseTitle;
@@ -48,7 +48,7 @@ export function useLegalWorkspace(){
  const [focusId,setFocusId]=useState<string|null>(null);
  const [input,setInput]=useState('');
  const [wageExampleArmed,setWageExampleArmed]=useState(false);
- const wageExampleArmedRef=useRef(false);
+ const wageExampleArmedRef=useRef<ExamplePreset|null>(null);
  const [mobileView,setMobileView]=useState<'chat'|'map'>('chat');
  const [chatCollapsed,setChatCollapsed]=useState(false);
  const autoFoldedCases=useRef(new Set<string>());
@@ -104,7 +104,7 @@ export function useLegalWorkspace(){
  const detailKey=current.id+':'+selected;
  const loadDetails=async()=>{
   if(!active||!selected)return;
-  if(active.examplePreset==='wage-fast')return; // The entire example graph has local detail fixtures.
+  if(active.examplePreset)return; // Precomputed example graphs contain local procedures and detail fixtures.
   const node=chosen;if(!node||node.kind==='completion'||Boolean(node.linkedRouteId)||(node.detailVersion||0)>=ANALYSIS_VERSION)return;
   const key=current.id+':'+node.id;if(detailRequests.current.has(key))return;
   detailRequests.current.add(key);setLoadingDetails(v=>({...v,[key]:true}));setDetailErrors(v=>({...v,[key]:''}));
@@ -151,7 +151,7 @@ export function useLegalWorkspace(){
     const savedPreview=JSON.parse(localStorage.getItem(PREVIEW_STORE)||'null');
     if(savedPreview?.id===demo.id&&Array.isArray(savedPreview.nodes))setPreviewCase(savedPreview);
     const parsed=JSON.parse(localStorage.getItem(STORE)||'[]');
-    const restored:LegalCase[]=Array.isArray(parsed)?parsed.filter(x=>x&&typeof x.id==='string'&&(!x.demo||x.examplePreset==='wage-fast')).slice(0,50).map(x=>{const oldName=typeof x.name==='string'?x.name:'새 대화';const firstMessage=Array.isArray(x.messages)?x.messages.find((m:Message)=>m.role==='user')?.content:'';return normalizeSavedRoadmapTerms({...x,name:summarizeCaseTitle(oldName.endsWith('…')&&firstMessage?firstMessage:oldName)});}):[];
+    const restored:LegalCase[]=Array.isArray(parsed)?parsed.filter(x=>x&&typeof x.id==='string'&&(!x.demo||x.examplePreset==='wage-fast'||x.examplePreset==='deposit-fast'||x.examplePreset==='police-fast')).slice(0,50).map(x=>{const oldName=typeof x.name==='string'?x.name:'새 대화';const firstMessage=Array.isArray(x.messages)?x.messages.find((m:Message)=>m.role==='user')?.content:'';return normalizeSavedRoadmapTerms({...x,name:summarizeCaseTitle(oldName.endsWith('…')&&firstMessage?firstMessage:oldName)});}):[];
     const savedFoldIds=JSON.parse(localStorage.getItem(AUTO_FOLD_KEY)||'[]');
     autoFoldedCases.current=new Set([...(Array.isArray(savedFoldIds)?savedFoldIds.filter((id:unknown):id is string=>typeof id==='string'):[]),...restored.filter(c=>c.nodes.length>0&&!c.intake).map(c=>c.id)]);
     if(!restored.length){const first=blank();setCases([first]);setActiveId(first.id)}
@@ -227,7 +227,7 @@ export function useLegalWorkspace(){
    if(window.matchMedia('(min-width: 861px)').matches)setChatCollapsed(true);
    else setMobileView('map');
  },[hydrated,active,busy]);
- const newCase=()=>{recordActivity('new_case');wageExampleArmedRef.current=false;setWageExampleArmed(false);const c={...blank(),modelId:inventory?.defaultId||undefined};setCases(x=>[...x,c]);setActiveId(c.id);setChatCollapsed(false);setSelected(null);setInput('');setError('');setHistoryOpen(false);setMobileView('chat');inputRef.current?.focus()};
+ const newCase=()=>{recordActivity('new_case');wageExampleArmedRef.current=null;setWageExampleArmed(false);const c={...blank(),modelId:inventory?.defaultId||undefined};setCases(x=>[...x,c]);setActiveId(c.id);setChatCollapsed(false);setSelected(null);setInput('');setError('');setHistoryOpen(false);setMobileView('chat');inputRef.current?.focus()};
  const deleteCase=(id:string)=>{if(!busy)setDeleteTarget(id)};
  const closeTab=(id:string)=>{
   if(busy)return;
@@ -285,23 +285,25 @@ export function useLegalWorkspace(){
    const latestUser=previous?.messages.filter(m=>m.role==='user').slice(-1)[0]?.content;
    const message=(refresh?(latestUser||'현재 상황과 진행 상태를 바탕으로 선택지를 다시 정리해 주세요.'):(value??input)).trim();if(!message||busyRef.current)return;
    if(recordUserMessage)recordActivity(refresh?'map_update':'query',message);
-   // Only the specifically clicked welcome example is precomputed; typed cases keep the AI route.
-   if(!refresh&&wageExampleArmedRef.current&&message===SHOWCASE_STORY&&!previous?.messages.length&&!previous?.intake){
-     wageExampleArmedRef.current=false;setWageExampleArmed(false);
+   // Only explicitly clicked welcome examples are precomputed; manually typed messages use the AI route.
+   const selectedPreset=wageExampleArmedRef.current;
+   if(!refresh&&selectedPreset&&presetForStory(message)===selectedPreset&&!previous?.messages.length&&!previous?.intake){
+     wageExampleArmedRef.current=null;setWageExampleArmed(false);
      const controller=new AbortController();const version=++requestVersion.current;
      requestAbort.current=controller;busyRef.current=true;setBusy(true);
      setAnalysisProgress({phase:'intake',message:'미리 준비한 사례의 확인 질문을 불러오고 있어요.'});
      setInput('');setSelected(null);setError('');
      const createdAt=new Date().toISOString();
      const caseId=previous?.id||crypto.randomUUID();
-     const start:LegalCase={...(previous||blank()),id:caseId,demo:true,examplePreset:'wage-fast',name:'퇴사 후 임금체불 · 예시',updatedAt:createdAt,
+     const presetNames:Record<ExamplePreset,string>={'wage-fast':'퇴사 후 임금체불 · 예시','deposit-fast':'보증금 반환 · 예시','police-fast':'경찰 출석 연락 · 예시'};
+     const start:LegalCase={...(previous||blank()),id:caseId,demo:true,examplePreset:selectedPreset,name:presetNames[selectedPreset],updatedAt:createdAt,
        messages:[{id:crypto.randomUUID(),role:'user',content:message,createdAt}],nodes:[],edges:[],facts:[],sources:[],intake:undefined};
      setCases(items=>items.some(c=>c.id===caseId)?items.map(c=>c.id===caseId?start:c):[...items,start]);
      setActiveId(caseId);
      try{
-       await waitWageExample(controller.signal);
+       await waitFastExample(controller.signal);
        if(requestVersion.current!==version||controller.signal.aborted)return;
-       const plan=wageExamplePlan();
+       const plan=examplePlan(selectedPreset);
        setCases(items=>items.map(c=>c.id===caseId?{...c,intake:plan,...previewIntake(plan)}:c));
      }catch{
        if(requestVersion.current===version)setCases(items=>items.map(c=>c.id===caseId?{...c,messages:[...c.messages,{id:crypto.randomUUID(),role:'assistant',content:'요청을 멈췄어요. 예시를 다시 시작할 수 있어요.',createdAt:new Date().toISOString()}]}:c));
@@ -317,7 +319,7 @@ export function useLegalWorkspace(){
    setAnalysisProgress({phase:'analyzing',message:'이야기를 읽고 가능한 방법을 정리하고 있어요.'});
    setBusy(true);setSelected(null);setError('');if(!refresh)setInput('');
    const firstIntake=!refresh&&!snapshotOverride&&!previous?.intake&&!previous?.messages.some(m=>m.role==='user')&&!previous?.nodes.length;
-   const base={...(previous||blank()),modelId:effectiveModelId};
+   const base={...(previous||blank()),modelId:effectiveModelId,demo:previous?.examplePreset?false:previous?.demo,examplePreset:undefined};
    const userMsg:Message={id:crypto.randomUUID(),role:'user',content:message,createdAt:new Date().toISOString()};
    const lastMessage=base.messages[base.messages.length-1];
    const retryMessages=refresh&&lastMessage?.role==='assistant'&&lastMessage.error?base.messages.slice(0,-1):base.messages;
@@ -366,8 +368,8 @@ export function useLegalWorkspace(){
    if(!recorded?.intake)return;
    recordActivity('answer',[answer.choice,answer.detail].filter(Boolean).join(' · '));
    const plan=recorded.intake;
-   if(active.examplePreset==='wage-fast'){
-     const nextPlan=nextWageExamplePlan(plan);
+   if(active.examplePreset&&(!answer.detail.trim()||(active.examplePreset==='wage-fast'&&plan.answers.length===plan.questions.length))){
+     const nextPlan=nextExamplePlan(active.examplePreset,plan);
      const next:LegalCase={...recorded,intake:nextPlan,...previewIntake(nextPlan)};
      const controller=new AbortController();const version=++requestVersion.current;
      requestAbort.current=controller;busyRef.current=true;setBusy(true);setError('');
@@ -376,10 +378,10 @@ export function useLegalWorkspace(){
      setIntakeHintCaseId(null);
      setCases(items=>items.map(c=>c.id===active.id?next:c));
      try{
-       await waitWageExample(controller.signal);
+       await waitFastExample(controller.signal);
        if(requestVersion.current!==version||controller.signal.aborted)return;
        if(nextPlan.answers.length>=nextPlan.questions.length){
-         const result=wageExampleResult(nextPlan);
+         const result=exampleResult(active.examplePreset!,nextPlan);
          const assistantMsg:Message={id:crypto.randomUUID(),role:'assistant',content:result.reply,createdAt:new Date().toISOString()};
          setCases(items=>items.map(c=>c.id===active.id?{...c,...result,intake:undefined,messages:[...next.messages,assistantMsg],updatedAt:new Date().toISOString()}:c));
        }else{
@@ -392,7 +394,9 @@ export function useLegalWorkspace(){
      }
      return;
    }
-   const next:LegalCase={...recorded,...previewIntake(plan)};
+   // The API interview expects only questions already asked; a local preset knows all three in advance.
+   const apiPlan=recorded.examplePreset?{...plan,questions:plan.questions.slice(0,plan.answers.length)}:plan;
+   const next:LegalCase={...recorded,intake:apiPlan,demo:recorded.examplePreset?false:recorded.demo,examplePreset:undefined,...previewIntake(apiPlan)};
    setIntakeHintCaseId(null);
    setCases(items=>items.map(c=>c.id===active.id?next:c));
    // A third answer completes the interview without an extra LLM round-trip.
@@ -402,7 +406,7 @@ export function useLegalWorkspace(){
    setAnalysisProgress({phase:'intake',message:'방금 알려주신 내용을 토대로 다음 핵심 쟁점을 살펴보고 있어요.'});
    try{
      const response=await fetch('/api/intake',{method:'POST',headers:{'Content-Type':'application/json'},
-       body:JSON.stringify({message:plan.original,plan,modelId:chosenModelId}),signal:controller.signal});
+       body:JSON.stringify({message:apiPlan.original,plan:apiPlan,modelId:chosenModelId}),signal:controller.signal});
      const payload=await response.json().catch(()=>({}));
      if(!response.ok)throw new Error(payload.error||'다음 질문을 불러오지 못했어요.');
      if(controller.signal.aborted||requestVersion.current!==version)return;
@@ -426,8 +430,8 @@ export function useLegalWorkspace(){
  const alternativeModel=inventory?.models.filter(model=>model.available&&model.id!==chosenModelId).sort((a,b)=>fallbackRank(a.provider,a.model,a.effort)-fallbackRank(b.provider,b.model,b.effort))[0];
  const retryWithAlternative=()=>{if(!alternativeModel)return;setPreferredModel(alternativeModel.id);if(active)setCases(values=>values.map(value=>value.id===active.id?{...value,modelId:alternativeModel.id}:value));void submit(undefined,true,alternativeModel.id)};
  const example=()=>{setSelected(null);setHistoryOpen(false);setActiveId(null);if(captureMode.current){setPreviewCase(structuredClone(demo));setFocusId(null);setChatCollapsed(true)}};
- const fillInput=(text:string)=>{recordActivity('example',text);const armed=text===SHOWCASE_STORY&&!active?.messages.length;wageExampleArmedRef.current=armed;setWageExampleArmed(armed);setInput(text);setSelected(null);setChatCollapsed(false);setMobileView('chat');requestAnimationFrame(()=>inputRef.current?.focus())};
- const changeInput=(text:string)=>{wageExampleArmedRef.current=false;setWageExampleArmed(false);setInput(text)};
+ const fillInput=(text:string)=>{recordActivity('example',text);const armed=!active?.messages.length?presetForStory(text):null;wageExampleArmedRef.current=armed;setWageExampleArmed(Boolean(armed));setInput(text);setSelected(null);setChatCollapsed(false);setMobileView('chat');requestAnimationFrame(()=>inputRef.current?.focus())};
+ const changeInput=(text:string)=>{wageExampleArmedRef.current=null;setWageExampleArmed(false);setInput(text)};
  const done=current.nodes.filter(n=>n.status==='done');
  const completedSummary=`완료한 절차 ${done.length}개`;
  const activatedRoutes=current.nodes.filter(n=>n.kind==='route'&&n.userConfirmed&&n.scenario);
