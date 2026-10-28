@@ -9,7 +9,21 @@ const {conciseSummary,validSummaryLines,procedureName,detailHeadline,supplementa
 const {roadmapCardSummary,roadmapCardDisplaySummary,roadmapParallelNote,routeKeyword,roadmapCardFooter}=load('roadmap-card-copy');
 const {normalizeAnalysis}=load('analysis');
 const {nodeDuration,scenarioTiming}=load('legal-copy');
-const {selectedModelId,composerModelLabel}=load('model-selection');
+const {selectedModelId,composerModelLabel,migrateEmptyConversationModels}=load('model-selection');
+test('Luna default migration upgrades empty MiniMax chats without changing real conversations',()=>{
+ const defaults='env:bai:gpt-6-luna';
+ const empty={id:'draft',modelId:'env:bai:minimax-m3.1-flash',messages:[],nodes:[]};
+ const inProgress={id:'active',modelId:'env:bai:minimax-m3.1-flash',messages:[{role:'user',content:'질문'}],nodes:[]};
+ const mapped={id:'map',modelId:'env:bai:minimax-m3.1-flash',messages:[],nodes:[{id:'one'}]};
+ const intake={id:'intake',modelId:'env:bai:minimax-m3.1-flash',messages:[],nodes:[],intake:{questions:[]}};
+ const migrated=migrateEmptyConversationModels([empty,inProgress,mapped,intake],defaults);
+ assert.equal(migrated[0].modelId,defaults);
+ assert.strictEqual(migrated[1],inProgress);
+ assert.strictEqual(migrated[2],mapped);
+ assert.strictEqual(migrated[3],intake);
+ assert.strictEqual(migrateEmptyConversationModels(migrated,defaults),migrated);
+ assert.equal(selectedModelId({models:[{id:defaults,available:true},{id:empty.modelId,available:true}],defaultId:defaults},migrated[0].modelId,empty.modelId),defaults);
+});
 test('composer names the actually selected model rather than showing AI',()=>{
  assert.equal(composerModelLabel({provider:'bai',model:'gpt-6-luna'}),'GPT');
  assert.equal(composerModelLabel({provider:'glm',model:'glm-5.3'}),'GLM');

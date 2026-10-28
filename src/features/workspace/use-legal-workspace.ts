@@ -11,7 +11,7 @@ import {limitCaseTitle,summarizeCaseTitle} from '@/lib/case-title';
 import {expandRoadmap,revealedCount} from '@/lib/scenario-graph';
 import {normalizeSavedRoadmapTerms} from '@/lib/legal-procedure-terms';
 import type {ModelInventory} from '@/lib/model-types';
-import {selectedModelId} from '@/lib/model-selection';
+import {migrateEmptyConversationModels,selectedModelId} from '@/lib/model-selection';
 import {readAnalysisStream} from '@/lib/analysis-stream';
 import {previewIntake,recordIntakeAnswer,reconcileIntakeResult,intakeSummary,type IntakeAnswer,type IntakePlan} from '@/lib/intake';
 import type {AnalysisProgressState} from '@/features/shared/analysis-progress';
@@ -199,6 +199,19 @@ export function useLegalWorkspace(){
   if(!paused)schedule();
   return()=>{clearTimeout(timeout);window.removeEventListener('message',onMessage)};
  },[]);
+ // One-time upgrade: legacy MiniMax selections must not override the new Luna default in unused chats.
+ // Existing conversations with messages, maps or an intake remain untouched.
+ useEffect(()=>{
+  if(!hydrated||!inventory?.defaultId||captureMode.current)return;
+  const defaultModel=inventory.models.find(model=>model.id===inventory.defaultId);
+  if(defaultModel?.model!=='gpt-6-luna')return;
+  const migrationKey='legal-default-model-migration-luna-v1';
+  if(localStorage.getItem(migrationKey)==='complete')return;
+  setCases(items=>migrateEmptyConversationModels(items,inventory.defaultId));
+  setPreferredModel(inventory.defaultId);
+  localStorage.setItem('legal-preferred-model',inventory.defaultId);
+  localStorage.setItem(migrationKey,'complete');
+ },[hydrated,inventory]);
  useEffect(()=>{if(hydrated&&!captureMode.current)localStorage.setItem(STORE,JSON.stringify(cases))},[cases,hydrated]);
  useEffect(()=>{if(hydrated&&!captureMode.current)localStorage.setItem(PREVIEW_STORE,JSON.stringify(previewCase))},[previewCase,hydrated]);
  useEffect(()=>{if(hydrated&&!captureMode.current){activeId?localStorage.setItem(ACTIVE,activeId):localStorage.removeItem(ACTIVE)}},[activeId,hydrated]);
@@ -214,7 +227,7 @@ export function useLegalWorkspace(){
    if(window.matchMedia('(min-width: 861px)').matches)setChatCollapsed(true);
    else setMobileView('map');
  },[hydrated,active,busy]);
- const newCase=()=>{recordActivity('new_case');wageExampleArmedRef.current=false;setWageExampleArmed(false);const c={...blank(),modelId:chosenModelId||inventory?.defaultId||undefined};setCases(x=>[...x,c]);setActiveId(c.id);setChatCollapsed(false);setSelected(null);setInput('');setError('');setHistoryOpen(false);setMobileView('chat');inputRef.current?.focus()};
+ const newCase=()=>{recordActivity('new_case');wageExampleArmedRef.current=false;setWageExampleArmed(false);const c={...blank(),modelId:inventory?.defaultId||undefined};setCases(x=>[...x,c]);setActiveId(c.id);setChatCollapsed(false);setSelected(null);setInput('');setError('');setHistoryOpen(false);setMobileView('chat');inputRef.current?.focus()};
  const deleteCase=(id:string)=>{if(!busy)setDeleteTarget(id)};
  const closeTab=(id:string)=>{
   if(busy)return;
