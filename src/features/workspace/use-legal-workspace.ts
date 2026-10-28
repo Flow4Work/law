@@ -16,6 +16,7 @@ import {readAnalysisStream} from '@/lib/analysis-stream';
 import {previewIntake,recordIntakeAnswer,reconcileIntakeResult,intakeSummary,type IntakeAnswer,type IntakePlan} from '@/lib/intake';
 import type {AnalysisProgressState} from '@/features/shared/analysis-progress';
 import {useMobileLayout} from '@/features/shared/use-mobile-layout';
+import {recordActivity} from '@/lib/activity-client';
 
 const STORE='ai-legal-roadmap-cases-v1';
 const ACTIVE='ai-legal-roadmap-active-v1';
@@ -75,7 +76,7 @@ export function useLegalWorkspace(){
  const chosenModelId=selectedModelId(inventory,active?.modelId,preferredModel);
  const chosenModel=inventory?.models.find(m=>m.id===chosenModelId);
  const deleteValue=cases.find(c=>c.id===deleteTarget);
- const applyInventory=(data:ModelInventory,id?:string)=>{setInventory(data);if(id){const match=data.models.find(m=>m.id===id)||data.models.find(m=>m.id.startsWith(id+':'));if(match){setPreferredModel(match.id);if(active)setCases(values=>values.map(c=>c.id===active.id?{...c,modelId:match.id}:c))}}};
+ const applyInventory=(data:ModelInventory,id?:string)=>{setInventory(data);if(id){const match=data.models.find(m=>m.id===id)||data.models.find(m=>m.id.startsWith(id+':'));if(match){recordActivity('model',match.name);setPreferredModel(match.id);if(active)setCases(values=>values.map(c=>c.id===active.id?{...c,modelId:match.id}:c))}}};
  useEffect(()=>{if(typeof window!=='undefined'&&new URLSearchParams(window.location.search).has('showcase'))return;let alive=true;fetch('/api/models').then(r=>{if(!r.ok)throw new Error();return r.json()}).then(data=>{if(alive)setInventory(data)}).catch(()=>{if(alive)setError('모델 연결 목록을 읽지 못했어요. 모델 연결에서 다시 확인해주세요.')});return()=>{alive=false;requestAbort.current?.abort()}},[]);
  const expanded=useMemo(()=>expandRoadmap(current),[current]);
  const mapCase=useMemo(()=>({...current,nodes:expanded.nodes,edges:expanded.edges}),[current,expanded]);
@@ -88,6 +89,7 @@ export function useLegalWorkspace(){
  const selectNode=(id:string)=>{
   if(active?.intake){if(mapCase.nodes.some(n=>n.id===id))setIntakeHintCaseId(current.id);return}
   if(busy)return;
+  recordActivity('view_step',mapCase.nodes.find(node=>node.id===id)?.title||'');
   setSelected(id);setFocusId(id);setSourcesOpen(false);
  };
  const hasMessages=Boolean(active?.messages.length);
@@ -204,7 +206,7 @@ export function useLegalWorkspace(){
    if(window.matchMedia('(min-width: 861px)').matches)setChatCollapsed(true);
    else setMobileView('map');
  },[hydrated,active,busy]);
- const newCase=()=>{wageExampleArmedRef.current=false;setWageExampleArmed(false);const c={...blank(),modelId:chosenModelId||inventory?.defaultId||undefined};setCases(x=>[...x,c]);setActiveId(c.id);setChatCollapsed(false);setSelected(null);setInput('');setError('');setHistoryOpen(false);setMobileView('chat');inputRef.current?.focus()};
+ const newCase=()=>{recordActivity('new_case');wageExampleArmedRef.current=false;setWageExampleArmed(false);const c={...blank(),modelId:chosenModelId||inventory?.defaultId||undefined};setCases(x=>[...x,c]);setActiveId(c.id);setChatCollapsed(false);setSelected(null);setInput('');setError('');setHistoryOpen(false);setMobileView('chat');inputRef.current?.focus()};
  const deleteCase=(id:string)=>{if(!busy)setDeleteTarget(id)};
  const closeTab=(id:string)=>{
   if(busy)return;
@@ -219,11 +221,12 @@ export function useLegalWorkspace(){
   setDeleteTarget(null);
  };
  const confirmDelete=()=>{if(!deleteValue)return;const index=cases.findIndex(c=>c.id===deleteValue.id);setCases(x=>x.filter(c=>c.id!==deleteValue.id));if(activeId===deleteValue.id)setActiveId(cases[index+1]?.id||cases[index-1]?.id||null);setDeleteTarget(null)};
- const chooseModel=(id:string)=>{setPreferredModel(id);setSelected(null);if(active)setCases(values=>values.map(c=>c.id===active.id?{...c,modelId:id}:c))};
+ const chooseModel=(id:string)=>{recordActivity('model',inventory?.models.find(model=>model.id===id)?.name||'');setPreferredModel(id);setSelected(null);if(active)setCases(values=>values.map(c=>c.id===active.id?{...c,modelId:id}:c))};
  const startStep=async(id:string)=>{
   const node=mapCase.nodes.find(n=>n.id===id);
   const route=current.nodes.find(n=>n.id===(node?.scenarioParentId||id));
   if(!route||busy||route.status==='unavailable')return;
+  recordActivity('map_start',route.title);
   const snapshot=current;const key=snapshot.id+':'+id;
   const requestKey=snapshot.id+':'+route.id;
   if(proceedRequests.current.has(requestKey))return;
@@ -260,6 +263,7 @@ export function useLegalWorkspace(){
    const previous=snapshotOverride||active;
    const latestUser=previous?.messages.filter(m=>m.role==='user').slice(-1)[0]?.content;
    const message=(refresh?(latestUser||'현재 상황과 진행 상태를 바탕으로 선택지를 다시 정리해 주세요.'):(value??input)).trim();if(!message||busyRef.current)return;
+   if(recordUserMessage)recordActivity(refresh?'map_update':'query',message);
    // Only the specifically clicked welcome example is precomputed; typed cases keep the AI route.
    if(!refresh&&wageExampleArmedRef.current&&message===SHOWCASE_STORY&&!previous?.messages.length&&!previous?.intake){
      wageExampleArmedRef.current=false;setWageExampleArmed(false);
@@ -339,6 +343,7 @@ export function useLegalWorkspace(){
    const originalCase=active;
    const recorded=recordIntakeAnswer(active,answer);
    if(!recorded?.intake)return;
+   recordActivity('answer',[answer.choice,answer.detail].filter(Boolean).join(' · '));
    const plan=recorded.intake;
    if(active.examplePreset==='wage-fast'){
      const nextPlan=nextWageExamplePlan(plan);
@@ -399,7 +404,7 @@ export function useLegalWorkspace(){
  const alternativeModel=inventory?.models.filter(model=>model.available&&model.id!==chosenModelId).sort((a,b)=>Number(a.provider===chosenModel?.provider)-Number(b.provider===chosenModel?.provider)||Number(b.provider==='openrouter')-Number(a.provider==='openrouter'))[0];
  const retryWithAlternative=()=>{if(!alternativeModel)return;setPreferredModel(alternativeModel.id);if(active)setCases(values=>values.map(value=>value.id===active.id?{...value,modelId:alternativeModel.id}:value));void submit(undefined,true,alternativeModel.id)};
  const example=()=>{setSelected(null);setHistoryOpen(false);setActiveId(null);if(captureMode.current){setPreviewCase(structuredClone(demo));setFocusId(null);setChatCollapsed(true)}};
- const fillInput=(text:string)=>{const armed=text===SHOWCASE_STORY&&!active?.messages.length;wageExampleArmedRef.current=armed;setWageExampleArmed(armed);setInput(text);setSelected(null);setChatCollapsed(false);setMobileView('chat');requestAnimationFrame(()=>inputRef.current?.focus())};
+ const fillInput=(text:string)=>{recordActivity('example',text);const armed=text===SHOWCASE_STORY&&!active?.messages.length;wageExampleArmedRef.current=armed;setWageExampleArmed(armed);setInput(text);setSelected(null);setChatCollapsed(false);setMobileView('chat');requestAnimationFrame(()=>inputRef.current?.focus())};
  const changeInput=(text:string)=>{wageExampleArmedRef.current=false;setWageExampleArmed(false);setInput(text)};
  const done=current.nodes.filter(n=>n.status==='done');
  const completedSummary=`완료한 절차 ${done.length}개`;

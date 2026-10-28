@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@vercel/blob": "^2.8.2",
     "@xyflow/react": "^12.12.0",
     "lucide-react": "^0.468.0",
     "next": "^15.5.9",
