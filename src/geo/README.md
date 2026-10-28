@@ -57,8 +57,9 @@ now prevent that:
    never by whichever provider replied first.
 3. The resolved answer is stored per address under `activity/locations/<hashed ip>.enc`
    for 24 hours, so every serverless instance returns the same answer, and the activity
-   report rewrites the location columns of older rows from that stored answer. A browser
-   confirmation always takes precedence over the stored answer.
+   report rewrites the location columns of older rows from that stored answer. Without a
+   stored answer it falls back to the newest record for that address, which was resolved
+   with the current rules. A browser confirmation always takes precedence.
 
 The cache only holds the derived fields (district, confidence, evidence, ISP), never
 coordinates or the raw provider response, and only when at least one provider answered.
