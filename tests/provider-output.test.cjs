@@ -25,6 +25,7 @@ test('B.AI reasoning-only length response is retried with room for a complete ob
  assert(calls[1].body.max_tokens>calls[0].body.max_tokens);
  assert.equal(calls[0].body.response_format,undefined);
  assert.equal(calls[0].body.reasoning_effort,'low');
+ assert.equal(calls[0].body.temperature,undefined);
  assert(progress.some(p=>p.phase==='formatting'));
 });
 test('GPT Responses receives JSON mode and includes only assistant text, excluding reasoning',async()=>{

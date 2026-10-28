@@ -24,12 +24,13 @@ export async function requestAI(prompt:string,content:string,maxTokens=6000,opti
  const glm53=cfg.provider==='glm'&&/^glm-5\.3(?:-|$)/i.test(cfg.model)&&!/flash/i.test(cfg.model);
  const effort=cfg.effort||'low';
  const minimax=cfg.provider==='bai'&&/^minimax-/i.test(cfg.model);
- // MiniMax's gateway does not confirm JSON-mode support. Keep its final JSON in the prompt.
+ // MiniMax reasoning models use prompt JSON and their native sampling defaults.
+ // https://platform.minimax.io/docs/api-reference/text-post
  const jsonMode=options.json&&!minimax;
  let tokenBudget=outputBudget(cfg.provider,cfg.model,maxTokens,Boolean(options.json),effort);
  const body:Record<string,unknown>=responses?{model:cfg.model,input:messages,max_output_tokens:tokenBudget,
   ...(jsonMode?{text:{format:{type:'json_object'}}}:{})
- }:{model:cfg.model,messages,max_tokens:tokenBudget,temperature:0.2,
+ }:{model:cfg.model,messages,max_tokens:tokenBudget,...(!minimax?{temperature:0.2}:{}),
   ...(glm53?{thinking:{type:'enabled'},reasoning_effort:effort}:cfg.provider==='glm'?{thinking:{type:'disabled'}}:{}),
   ...(minimax?{reasoning_effort:effort}:{}),
   ...(jsonMode&&['glm','openrouter','opencode','bai'].includes(cfg.provider)?{response_format:{type:'json_object'}}:{})};
