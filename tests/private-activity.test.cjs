@@ -38,7 +38,7 @@ test('IP geolocation uses supplied city data and never invents a Seoul district'
 function fakeStore(){
  const entries=new Map();let revision=0;
  class Conflict extends Error{}
- return {entries,api:{BlobPreconditionFailedError:Conflict,BlobNotFoundError:class extends Error{},get:async key=>{
+ return {entries,api:{BlobPreconditionFailedError:Conflict,BlobNotFoundError:class extends Error{},list:async({prefix})=>({blobs:[...entries.keys()].filter(pathname=>pathname.startsWith(prefix)).map(pathname=>({pathname,uploadedAt:new Date()})),hasMore:false}),get:async key=>{
   const entry=entries.get(key);if(!entry)return null;
   return {statusCode:200,blob:{etag:entry.etag},stream:new Response(entry.body).body};
  },put:async(key,body,options)=>{
@@ -57,4 +57,14 @@ test('parallel serverless writers preserve all events; reports and rate limits s
  assert(![...store.entries.values()].some(value=>value.body.includes('safe test question')));
  for(let i=0;i<5;i++)assert.equal(await (i%2?first:second).claimAdminAttempt('203.0.113.99'),true);
  assert.equal(await first.claimAdminAttempt('203.0.113.99'),false);
+});
+test('a failed shared journal write preserves an immutable private event and remains readable',async()=>{
+ const store=fakeStore(),cipher=load('activity-crypto'),original=store.api.put;
+ store.api.put=async(key,body,options)=>{if(key.startsWith('activity/days/'))throw Error('temporary shared journal failure');return original(key,body,options)};
+ const api=load('activity-store',{'@vercel/blob':store.api,'./activity-crypto':cipher});
+ const event={id:'immutable-fallback-test',at:new Date().toISOString(),ip:'203.0.113.5',action:'query',detail:'test-only preserved question',city:'',district:'',country:'',location:'지역 확인 불가'};
+ await api.appendActivity(event);
+ assert.equal(store.entries.size,1);
+ assert([...store.entries.keys()][0].startsWith('activity/overflow/'));
+ const report=await api.readActivityReport(1);assert.equal(report.total,1);assert.equal(report.events[0].detail,event.detail);
 });

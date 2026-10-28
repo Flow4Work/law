@@ -1,5 +1,5 @@
 import 'server-only';
-import {get,put,BlobPreconditionFailedError,BlobNotFoundError} from '@vercel/blob';
+import {get,put,list,BlobPreconditionFailedError,BlobNotFoundError} from '@vercel/blob';
 import {mkdir,readFile,writeFile,rename,open} from 'node:fs/promises';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -24,18 +24,31 @@ export async function appendActivity(event:ActivityEvent){
    const next:Journal={events:[...(value.events||[]),event].slice(-2000),limited:value.limited||(value.events||[]).length>=2000};
    const encrypted=encryptActivity(next);
    if(!cloud()){await mkdir(root,{recursive:true});const temporary=path.join(root,key+'-'+randomUUID()+'.tmp');await writeFile(temporary,encrypted,{mode:0o600});await rename(temporary,path.join(root,key+'.enc'));return}
-   try{await put('activity/days/'+key+'.enc',encrypted,{access:'private',addRandomSuffix:false,contentType:'application/octet-stream',...(etag?{ifMatch:etag}:{allowOverwrite:false})});return}
+   try{await put('activity/days/'+key+'.enc',encrypted,{access:'private',addRandomSuffix:false,contentType:'application/octet-stream',...(etag?{allowOverwrite:true,ifMatch:etag}:{allowOverwrite:false})});return}
    catch(error){if(!conflicts(error)||attempt===5)throw error;await new Promise(resolve=>setTimeout(resolve,40*(attempt+1)))}
   }
  };
- const task=queue.then(append);queue=task.catch(()=>{});return task;
+ const task=queue.then(append).catch(async error=>{
+  if(!cloud())throw error;
+  // A unique immutable file preserves the event even if the shared journal is
+  // contended, throttled or its latest ETag is not yet visible to another worker.
+  await put('activity/overflow/'+key+'/'+event.id+'.enc',encryptActivity({events:[event]}),{access:'private',addRandomSuffix:false,contentType:'application/octet-stream'});
+ });
+ queue=task.catch(()=>{});return task;
 }
 export async function readActivityReport(days:number):Promise<ActivityReport>{
  const count=[1,7,30].includes(days)?days:1;
- const journals:Journal[]=[];
- for(let start=0;start<count;start+=5)journals.push(...await Promise.all(Array.from({length:Math.min(5,count-start)},(_,offset)=>readJournal(day(Date.now()-(start+offset)*86400000)).then(result=>result.value))));
- const all=journals.flatMap(value=>value.events||[]).sort((a,b)=>b.at.localeCompare(a.at));
- return {events:all.slice(0,1000),total:all.length,visits:all.filter(event=>event.action==='visit').length,queries:all.filter(event=>event.action==='query').length,uniqueIps:new Set(all.map(event=>event.ip).filter(ip=>ip!=='확인 불가')).size,days:count,generatedAt:new Date().toISOString(),limited:journals.some(value=>value.limited)||all.length>1000};
+ const journals:Journal[]=[],overflow:{pathname:string;uploadedAt:Date}[]=[];
+ let overflowLimited=false;
+ for(let start=0;start<count;start+=5)await Promise.all(Array.from({length:Math.min(5,count-start)},async(_,offset)=>{
+  const key=day(Date.now()-(start+offset)*86400000);
+  journals.push((await readJournal(key)).value);
+  if(cloud()){const result=await list({prefix:'activity/overflow/'+key+'/',limit:1000});overflow.push(...result.blobs);overflowLimited||=result.hasMore}
+ }));
+ const candidates=overflow.sort((a,b)=>new Date(b.uploadedAt).getTime()-new Date(a.uploadedAt).getTime()).slice(0,1000);
+ for(let start=0;start<candidates.length;start+=16)journals.push(...await Promise.all(candidates.slice(start,start+16).map(async blob=>{const result=await get(blob.pathname,{access:'private',useCache:false});return result?.statusCode===200?decryptActivity<Journal>(await new Response(result.stream).text()):{events:[]}})));
+ const all=Array.from(new Map(journals.flatMap(value=>value.events||[]).map(event=>[event.id,event])).values()).sort((a,b)=>b.at.localeCompare(a.at));
+ return {events:all.slice(0,1000),total:all.length,visits:all.filter(event=>event.action==='visit').length,queries:all.filter(event=>event.action==='query').length,uniqueIps:new Set(all.map(event=>event.ip).filter(ip=>ip!=='확인 불가')).size,days:count,generatedAt:new Date().toISOString(),limited:journals.some(value=>value.limited)||all.length>1000||overflowLimited||overflow.length>1000};
 }
 /** Five login attempts per IP per ten minutes; storage claims remain valid across serverless instances. */
 export async function claimAdminAttempt(ip:string){
