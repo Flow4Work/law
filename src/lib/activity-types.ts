@@ -3,4 +3,6 @@ export type ActivityAction=keyof typeof ACTIVITY_LABELS;
 export type ActivityDistrictSource='verified'|'ip-city'|'ip-postal'|'ip-coordinate'|'geo-city'|'geo-postal'|'geo-coordinate'|'unavailable';
 export type ActivityConfidence='high'|'medium'|'low';
 export type ActivityEvent={id:string;at:string;ip:string;ipVersion?:string;country:string;city:string;district:string;location:string;districtSource?:ActivityDistrictSource;districtConfidence?:ActivityConfidence;districtEvidence?:string;locationNote?:string;isp?:string;asn?:string;networkType?:string;networkRisk?:string;action:ActivityAction;detail:string};
+/** Everything one IP resolves to, without the per-request address fields. */
+export type ActivityLocationSnapshot={country:string;city:string;district:string;location:string;districtSource:ActivityDistrictSource;districtConfidence:ActivityConfidence;districtEvidence:string;locationNote:string;isp:string;asn:string;networkType:string;networkRisk:string};
 export type ActivityReport={events:ActivityEvent[];total:number;visits:number;queries:number;uniqueIps:number;days:number;generatedAt:string;limited:boolean};

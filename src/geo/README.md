@@ -45,6 +45,24 @@ Rules:
 
 Only Seoul is resolved. Other Korean addresses keep the city name the providers report.
 
+### One answer per address
+
+Free providers fail intermittently. When one of them timed out or rate-limited, the same
+visitor was resolved from two votes instead of three and the tie settled on a different
+district — the same IP read `광진구` at one minute and `성동구` at the next. Three rules
+now prevent that:
+
+1. A provider that fails is asked once more before its vote is dropped.
+2. An exact tie is settled by a fixed provider order (`ip-api`, `ip.sb`, `freeipapi`),
+   never by whichever provider replied first.
+3. The resolved answer is stored per address under `activity/locations/<hashed ip>.enc`
+   for 24 hours, so every serverless instance returns the same answer, and the activity
+   report rewrites the location columns of older rows from that stored answer. A browser
+   confirmation always takes precedence over the stored answer.
+
+The cache only holds the derived fields (district, confidence, evidence, ISP), never
+coordinates or the raw provider response, and only when at least one provider answered.
+
 ### Third-party IP databases
 
 The server asks three services for the visitor IP and maps all answers locally:

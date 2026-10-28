@@ -2,7 +2,7 @@ import 'server-only';
 import {isIP} from 'node:net';
 import boundaries from '@/geo/seoul-districts.json';
 import postalRanges from '@/geo/seoul-postal-districts.json';
-import type {ActivityConfidence,ActivityDistrictSource} from './activity-types';
+import type {ActivityConfidence,ActivityDistrictSource,ActivityLocationSnapshot} from './activity-types';
 
 const districts:Record<string,string>={gangnam:'강남구',gangdong:'강동구',gangbuk:'강북구',gangseo:'강서구',gwanak:'관악구',gwangjin:'광진구',guro:'구로구',geumcheon:'금천구',nowon:'노원구',dobong:'도봉구',dongdaemun:'동대문구',dongjak:'동작구',mapo:'마포구',seodaemun:'서대문구',seocho:'서초구',seongdong:'성동구',seongbuk:'성북구',songpa:'송파구',yangcheon:'양천구',yeongdeungpo:'영등포구',yongsan:'용산구',eunpyeong:'은평구',jongno:'종로구',jung:'중구',jungnang:'중랑구'};
 const districtNames=new Set(Object.values(districts));
@@ -105,14 +105,20 @@ type GeoLookup={country:string;region:string;regionCode:string;city:string;zip:s
 const lookupCache=new Map<string,{at:number;value:GeoLookup|null}>();
 const LOOKUP_TTL=6*60*60*1000,LOOKUP_LIMIT=400;
 const LOOKUP_TIMEOUT=2500;
-async function fetchJson(url:string){
+async function fetchJson(url:string,attempt=0):Promise<Record<string,unknown>|null>{
  if(typeof fetch!=='function')return null;
  const controller=typeof AbortController==='function'?new AbortController():null;
  const timer=controller?setTimeout(()=>controller.abort(),LOOKUP_TIMEOUT):null;
  try{
   const response=await fetch(url,{signal:controller?.signal,headers:{Accept:'application/json'},cache:'no-store'});
-  return response.ok?await response.json() as Record<string,unknown>:null;
- }catch{return null}finally{if(timer)clearTimeout(timer)}
+  if(!response.ok)throw new Error(String(response.status));
+  return await response.json() as Record<string,unknown>;
+ }catch{
+  // A provider that times out or rate-limits would silently shrink the vote to two,
+  // so one retry keeps the answer stable instead of flipping between visits.
+  if(attempt<1){await new Promise(resolve=>setTimeout(resolve,250));return fetchJson(url,attempt+1)}
+  return null;
+ }finally{if(timer)clearTimeout(timer)}
 }
 /**
  * Ask several independent databases at once. They disagree by kilometres inside Seoul,
@@ -165,11 +171,25 @@ function datasetDistrict(dataset:Dataset){
  return {district,source,signals};
 }
 
+/** Fixed order used only to settle an exact tie, so the answer never depends on which provider replied first. */
+const providerRank:Record<string,number>={'vercel':0,'ip-api':1,'ip.sb':2,'freeipapi':3};
+const rankOf=(group:string)=>providerRank[group]??9;
+
 function resolveDistrict(evidence:Evidence[]){
  const scores=new Map<string,number>();
- for(const item of evidence)scores.set(item.district,(scores.get(item.district)||0)+item.weight);
- let district='',score=0;
- for(const [name,value] of scores)if(value>score){district=name;score=value}
+ const best=new Map<string,number>();
+ for(const item of evidence){
+  scores.set(item.district,(scores.get(item.district)||0)+item.weight);
+  const rank=rankOf(item.group);
+  if(rank<(best.get(item.district)??99))best.set(item.district,rank);
+ }
+ let district='',score=-1,rank=99;
+ for(const [name,value] of scores){
+  const itemRank=best.get(name)??9;
+  if(value>score||(value===score&&(itemRank<rank||(itemRank===rank&&name<district)))){
+   district=name;score=value;rank=itemRank;
+  }
+ }
  const winning=evidence.filter(item=>item.district===district).sort((a,b)=>b.weight-a.weight);
  const competing=evidence.some(item=>item.district!==district&&item.weight>=3);
  const groups=new Set(winning.map(item=>item.group));
@@ -189,9 +209,13 @@ function resolveDistrict(evidence:Evidence[]){
 }
 
 /** Estimate the visitor's network location from every signal the request exposes. */
-export async function activityLocation(headers:Headers,verifiedDistrict=''){
+export async function activityLocation(headers:Headers,verifiedDistrict='',snapshot?:ActivityLocationSnapshot){
  const address=requestAddress(headers);
  const ip=address.ip;
+ if(snapshot){
+  const base={...snapshot,ip,ipVersion:address.ipVersion};
+  return verifiedDistrict?verifiedSnapshot(address,verifiedDistrict,base):base;
+ }
  const geo=await lookupAddress(ip,address);
  const country=(decode(headers.get('x-vercel-ip-country'))||geo?.country||'').toUpperCase();
  const vercelRegion=decode(headers.get('x-vercel-ip-country-region'));
@@ -242,6 +266,11 @@ export async function activityLocation(headers:Headers,verifiedDistrict=''){
  const location=city?(district?`${city} ${district}`:city):(country||'지역 확인 불가');
  const networkType=geo?(geo.hosting?'데이터센터·VPN 의심':geo.proxy?'프록시·VPN 의심':geo.mobile?'모바일 회선':'일반 회선'):'';
  const networkRisk=geo?(geo.proxy||geo.hosting?'의심':''):'';
- if(verifiedDistrict)return {ip,ipVersion:address.ipVersion,country,city,district,location,districtSource:'verified' as ActivityDistrictSource,districtConfidence:'high' as ActivityConfidence,districtEvidence:`브라우저 위치 확인 ${verifiedDistrict}`,locationNote:'',isp:geo?.isp||'',asn:geo?.asn||'',networkType,networkRisk};
- return {ip,ipVersion:address.ipVersion,country,city,district,location,districtSource:resolved.source,districtConfidence:resolved.confidence,districtEvidence:resolved.evidence,locationNote,isp:geo?.isp||'',asn:geo?.asn||'',networkType,networkRisk};
+ const value={country,city,district,location,districtSource:resolved.source,districtConfidence:resolved.confidence,districtEvidence:resolved.evidence,locationNote,isp:geo?.isp||'',asn:geo?.asn||'',networkType,networkRisk};
+ if(verifiedDistrict)return verifiedSnapshot(address,verifiedDistrict,value);
+ return {ip,ipVersion:address.ipVersion,...value};
+}
+/** A district the visitor confirmed in their own browser outranks every IP guess. */
+function verifiedSnapshot(address:RequestAddress,district:string,value:ActivityLocationSnapshot){
+ return {ip:address.ip,ipVersion:address.ipVersion,country:value.country,city:'서울특별시',district,location:`서울특별시 ${district}`,districtSource:'verified' as ActivityDistrictSource,districtConfidence:'high' as ActivityConfidence,districtEvidence:`브라우저 위치 확인 ${district}`,locationNote:'',isp:value.isp,asn:value.asn,networkType:value.networkType,networkRisk:value.networkRisk};
 }

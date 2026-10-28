@@ -115,6 +115,35 @@ test('three databases vote, so a single outlier cannot name the district',async(
  assert(value.locationNote.includes('중심 기본값'),value.locationNote);
  assert.equal(value.isp,'Korea Telecom');
 });
+test('a provider that fails once is retried, so a tie cannot flip the district between visits',async()=>{
+ const header=new Headers({'x-vercel-forwarded-for':'112.187.136.60','x-vercel-ip-country':'KR','x-vercel-ip-country-region':'11','x-vercel-ip-city':'Seoul','x-vercel-ip-postal-code':'03141'});
+ const body=value=>async()=>value;
+ const ipapi={ok:true,json:body({status:'success',countryCode:'KR',region:'11',regionName:'Seoul',city:'Seongdong-gu',zip:'047',lat:37.5511,lon:127.0387,isp:'Korea Telecom',as:'AS4766',mobile:false,proxy:false,hosting:false})};
+ const ipsb={ok:true,json:body({country_code:'KR',region:'Seoul',region_code:'11',city:'Gwangjin-gu',postal_code:'051',latitude:37.547,longitude:127.0958,isp:'KT'})};
+ const free={ok:true,json:body({countryCode:'KR',regionName:'Seoul',regionCode:'11',cityName:'Jayang-dong',zipCode:'13118',latitude:37.5317,longitude:127.075})};
+ let freeCalls=0;
+ const api=load('activity-location',{},{},{fetch:async url=>{
+  const href=String(url);
+  if(href.includes('ip-api.com'))return ipapi;
+  if(href.includes('ip.sb'))return ipsb;
+  freeCalls++;
+  if(freeCalls===1)throw new Error('rate limited');
+  return free;
+ }});
+ const value=await api.activityLocation(header);
+ assert.equal(freeCalls,2,'the failed provider is asked once more');
+ assert.equal(value.district,'광진구');
+});
+test('a remembered location is reused without asking the databases again',async()=>{
+ const looked=[];const api=load('activity-location',{},{},{fetch:async url=>{looked.push(String(url));throw new Error('offline')}});
+ const remembered={country:'KR',city:'서울특별시',district:'광진구',location:'서울특별시 광진구',districtSource:'geo-city',districtConfidence:'medium',districtEvidence:'IP DB ip.sb 광진구',locationNote:'',isp:'Korea Telecom',asn:'AS4766',networkType:'일반 회선',networkRisk:''};
+ const value=await api.activityLocation(new Headers({'x-vercel-forwarded-for':'112.187.136.60'}),'',remembered);
+ assert.equal(value.location,'서울특별시 광진구');
+ assert.equal(value.districtConfidence,'medium');
+ assert.equal(value.ip,'112.187.136.60');
+ assert.equal(value.ipVersion,'IPv4');
+ assert.equal(looked.length,0,'the stored answer is used instead of a fresh lookup');
+});
 test('an independent district-aware database supplies the district when Vercel reports only the city',async()=>{
  const {activityLocation,requestAddress}=load('activity-location');
  const header=new Headers({'x-vercel-forwarded-for':'121.130.10.20','x-vercel-ip-country':'KR','x-vercel-ip-country-region':'11','x-vercel-ip-city':'Seoul','x-vercel-ip-latitude':'37.5665','x-vercel-ip-longitude':'126.978'});
@@ -159,6 +188,19 @@ function fakeStore(){
   entries.set(key,{body,etag:String(++revision)});return {};
  }}};
 }
+test('one IP keeps the same location across instances for a day',async()=>{
+ const store=fakeStore(),cipher=load('activity-crypto');
+ const modules={'@vercel/blob':store.api,'./activity-crypto':cipher,'node:fs/promises':new Proxy({}, {get:()=>()=>{throw Error('Unexpected filesystem access')}})};
+ const first=load('activity-store',modules),second=load('activity-store',modules);
+ assert.equal(await first.readIpLocation('112.187.136.60'),null);
+ const snapshot={country:'KR',city:'서울특별시',district:'광진구',location:'서울특별시 광진구',districtSource:'geo-city',districtConfidence:'medium',districtEvidence:'IP DB ip.sb 광진구',locationNote:'',isp:'Korea Telecom',asn:'AS4766',networkType:'일반 회선',networkRisk:''};
+ await first.saveIpLocation('112.187.136.60',snapshot);
+ const remembered=await second.readIpLocation('112.187.136.60');
+ assert.equal(remembered.district,'광진구');
+ assert.equal(remembered.location,'서울특별시 광진구');
+ assert(![...store.entries.values()].some(value=>value.body.includes('광진구')),'the cached location is encrypted at rest');
+ assert.equal(await second.readIpLocation('112.187.136.61'),null);
+});
 test('parallel serverless writers preserve all events; reports and rate limits share durable storage',async()=>{
  const store=fakeStore(),cipher=load('activity-crypto');
  const modules={'@vercel/blob':store.api,'./activity-crypto':cipher,'node:fs/promises':new Proxy({}, {get:()=>()=>{throw Error('Unexpected filesystem access')}})};

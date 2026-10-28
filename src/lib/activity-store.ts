@@ -4,7 +4,7 @@ import {mkdir,readFile,writeFile,rename,open} from 'node:fs/promises';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {decryptActivity,encryptActivity,privateIpKey} from './activity-crypto';
-import type {ActivityEvent,ActivityReport} from './activity-types';
+import type {ActivityEvent,ActivityReport,ActivityLocationSnapshot} from './activity-types';
 const cloud=()=>process.env.VERCEL==='1';
 const root=path.join(process.cwd(),'data','private-activity');
 const day=(at=Date.now())=>new Date(at+9*60*60*1000).toISOString().slice(0,10);
@@ -68,6 +68,25 @@ export async function saveVerifiedDistrict(ip:string,district:string){
  const dir=path.join(root,'verified');await mkdir(dir,{recursive:true});
  const temporary=path.join(dir,privateIpKey(ip)+'-'+randomUUID()+'.tmp');
  await writeFile(temporary,body,{mode:0o600});await rename(temporary,path.join(root,'verified',privateIpKey(ip)+'.enc'));
+}
+/** One IP keeps the same answer for a day, even when a later request lands on another instance. */
+const LOCATION_TTL=24*60*60*1000;
+export async function readIpLocation(ip:string):Promise<ActivityLocationSnapshot|null>{
+ const name=privateIpKey(ip)+'.enc';
+ try{
+  const value=cloud()
+   ?await (async()=>{const result=await get('activity/locations/'+name,{access:'private',useCache:false});return result?.statusCode===200?decryptActivity<{at:string;snapshot:ActivityLocationSnapshot}>(await new Response(result.stream).text()):null})()
+   :decryptActivity<{at:string;snapshot:ActivityLocationSnapshot}>(await readFile(path.join(root,'locations',name),'utf8'));
+  if(!value||!value.snapshot||typeof value.at!=='string')return null;
+  return Date.now()-new Date(value.at).getTime()<LOCATION_TTL?value.snapshot:null;
+ }catch{return null}
+}
+export async function saveIpLocation(ip:string,snapshot:ActivityLocationSnapshot){
+ const name=privateIpKey(ip)+'.enc',body=encryptActivity({at:new Date().toISOString(),snapshot});
+ if(cloud()){await put('activity/locations/'+name,body,{access:'private',addRandomSuffix:false,allowOverwrite:true,contentType:'application/octet-stream'});return}
+ const dir=path.join(root,'locations');await mkdir(dir,{recursive:true});
+ const temporary=path.join(dir,privateIpKey(ip)+'-'+randomUUID()+'.tmp');
+ await writeFile(temporary,body,{mode:0o600});await rename(temporary,path.join(dir,name));
 }
 /** Five login attempts per IP per ten minutes; storage claims remain valid across serverless instances. */export async function claimAdminAttempt(ip:string){
  const bucket=Math.floor(Date.now()/600000),fingerprint=privateIpKey(ip);
