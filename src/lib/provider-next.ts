@@ -23,13 +23,15 @@ export async function requestAI(prompt:string,content:string,maxTokens=6000,opti
  const messages=[{role:'system',content:prompt},{role:'user',content}];
  const glm53=cfg.provider==='glm'&&/^glm-5\.3(?:-|$)/i.test(cfg.model)&&!/flash/i.test(cfg.model);
  const effort=cfg.effort||'low';
+ const minimax=cfg.provider==='bai'&&/^minimax-/i.test(cfg.model);
  // MiniMax's gateway does not confirm JSON-mode support. Keep its final JSON in the prompt.
- const jsonMode=options.json&&!(cfg.provider==='bai'&&/^minimax-/i.test(cfg.model));
+ const jsonMode=options.json&&!minimax;
  let tokenBudget=outputBudget(cfg.provider,cfg.model,maxTokens,Boolean(options.json),effort);
  const body:Record<string,unknown>=responses?{model:cfg.model,input:messages,max_output_tokens:tokenBudget,
   ...(jsonMode?{text:{format:{type:'json_object'}}}:{})
  }:{model:cfg.model,messages,max_tokens:tokenBudget,temperature:0.2,
   ...(glm53?{thinking:{type:'enabled'},reasoning_effort:effort}:cfg.provider==='glm'?{thinking:{type:'disabled'}}:{}),
+  ...(minimax?{reasoning_effort:effort}:{}),
   ...(jsonMode&&['glm','openrouter','opencode','bai'].includes(cfg.provider)?{response_format:{type:'json_object'}}:{})};
  const queueKey=createHash('sha256').update(base+'|'+cfg.key).digest('hex');
  let queue=queues.get(queueKey);if(!queue){queue=new RequestQueue();queues.set(queueKey,queue)}
@@ -39,7 +41,7 @@ export async function requestAI(prompt:string,content:string,maxTokens=6000,opti
   let expanded=false,plainFormat=false;
   for(let attempt=0;attempt<4;attempt++){
    scope?.signal?.throwIfAborted();
-   const timeout=AbortSignal.timeout(effort==='high'||effort==='max'?210000:150000);
+   const timeout=AbortSignal.timeout(minimax?240000:effort==='high'||effort==='max'?210000:150000);
    const signal=scope?.signal?AbortSignal.any([scope.signal,timeout]):timeout;
    let response:Response;
    try{response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json',...(cfg.key?{Authorization:'Bearer '+cfg.key}:{}),...(cfg.provider==='openrouter'?{'X-Title':'Legal Roadmap'}:{})},body:JSON.stringify(body),signal,cache:'no-store',redirect:'error'})}
@@ -48,6 +50,9 @@ export async function requestAI(prompt:string,content:string,maxTokens=6000,opti
    if(!response.ok){
     // A gateway can expose models without JSON mode. Fall back only for that explicit option error.
     const detail=JSON.stringify(json?.error||{}).toLowerCase();
+    if([400,422].includes(response.status)&&minimax&&body.reasoning_effort&&/reasoning[_ ]effort/.test(detail)&&/unsupported|not.support|not.allowed|invalid|unknown|unrecognized/.test(detail)){
+     delete body.reasoning_effort;continue;
+    }
     if([400,422].includes(response.status)&&options.json&&!plainFormat&&/response_format|text[. ]?format|json_object/.test(detail)&&/unsupported|not.support|not.allowed|invalid|unknown|unrecognized/.test(detail)){
      plainFormat=true;delete body.response_format;delete body.text;
      continue;

@@ -1,7 +1,7 @@
 /** Output limits include reasoning on many gateways, not just the visible answer. */
 export function outputBudget(provider:string,model:string,visibleTokens:number,json:boolean,effort='low'){
  const visible=json?Math.max(6000,visibleTokens):visibleTokens;
- const reasoning=provider==='bai'||((provider==='opencode')&&/^gpt-/i.test(model))
+ const reasoning=provider==='bai'&&/^minimax-/i.test(model)?16384:provider==='bai'||((provider==='opencode')&&/^gpt-/i.test(model))
   ?8192:provider==='glm'&&/^glm-5\.3(?:-|$)/i.test(model)&&!/flash/i.test(model)?(effort==='high'||effort==='max'?20000:8000):0;
  return Math.min(48000,visible+reasoning);
 }

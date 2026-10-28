@@ -24,6 +24,7 @@ test('B.AI reasoning-only length response is retried with room for a complete ob
  assert(calls[0].body.max_tokens>=14000);
  assert(calls[1].body.max_tokens>calls[0].body.max_tokens);
  assert.equal(calls[0].body.response_format,undefined);
+ assert.equal(calls[0].body.reasoning_effort,'low');
  assert(progress.some(p=>p.phase==='formatting'));
 });
 test('GPT Responses receives JSON mode and includes only assistant text, excluding reasoning',async()=>{
@@ -67,4 +68,10 @@ test('content filtering and failed Responses never publish partial answers',asyn
   const {api,calls}=load({model:response.data.status?'gpt-5.4-mini':'minimax-m3.1-flash'},[response]);
   await assert.rejects(api.requestAI('test','test'));assert.equal(calls.length,1);
  }
+});
+test('MiniMax gateways that reject effort controls fall back once without losing JSON validation',async()=>{
+ const {api,calls}=load({},[{status:400,data:{error:{message:'reasoning_effort is an unsupported parameter'}}},chat('{"ok":true}')]);
+ assert.equal((await api.requestObject('JSON','test')).ok,true);
+ assert.equal(calls[0].body.reasoning_effort,'low');assert.equal(calls[1].body.reasoning_effort,undefined);
+ assert.equal(calls.length,2);
 });
