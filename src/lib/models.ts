@@ -3,7 +3,7 @@ import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {createCipheriv,createDecipheriv,createHash,randomBytes,randomUUID} from 'node:crypto';
 import path from 'node:path';
 import type {ModelChoice,ModelInventory} from './model-types';
-import {listProviderModels} from './model-catalog';
+import {isAllowedBaiModel,listProviderModels,visibleProviderModels} from './model-catalog';
 import {readVisitorModels,writeVisitorModels} from './visitor-model-session';
 
 export type ProviderConfig=ModelChoice&{baseUrl:string;key:string};
@@ -45,11 +45,10 @@ async function baiEnvironmentModels(refresh=false):Promise<ProviderConfig[]>{
  if(!key)return [];
  const baseUrl=process.env.BAI_BASE_URL||'https://api.b.ai/v1';
  const base={provider:'bai',baseUrl,key,source:'운영자가 등록한 B.AI 연결',available:true};
- const configured=process.env.BAI_MODEL?.trim();
- if(configured)return [{...base,id:'env:bai:'+encodeURIComponent(configured),name:'B.AI · '+configured,model:configured}];
+ // Discover both permitted models even if a legacy BAI_MODEL environment setting exists.
  const identity=createHash('sha256').update(baseUrl+'|'+key).digest('hex');
  if(!refresh&&baiCatalogCache?.identity===identity&&Date.now()<baiCatalogCache.expires)return baiCatalogCache.task;
- const task=listProviderModels('bai',baseUrl,key).then(catalog=>catalog.filter(model=>!/image|video|embedding|whisper|tts|dall-e|sora|veo-|flux|banana|seedream|recraft/i.test(model.id)).map(model=>({...base,id:'env:bai:'+encodeURIComponent(model.id),name:'B.AI · '+model.name,model:model.id}))).catch(()=>{
+ const task=listProviderModels('bai',baseUrl,key).then(catalog=>visibleProviderModels('bai',catalog).map(model=>({...base,id:'env:bai:'+encodeURIComponent(model.id),name:'B.AI · '+model.name,model:model.id}))).catch(()=>{
   if(baiCatalogCache?.identity===identity)baiCatalogCache.expires=Date.now()+30000;
   return [{...base,id:'env:bai:unavailable',name:'B.AI · 연결 확인 필요',model:'',available:false,reason:'B.AI 모델 목록을 확인하지 못했어요. 연결 확인으로 다시 시도해주세요.'}];
  });
@@ -111,11 +110,15 @@ export async function allProviders(refresh=false){
  const [hiddenConnectionsList,hiddenModelsList]=modelConnectionsHosted()?[[],session.hiddenModels]:await Promise.all([hiddenConnections(),hiddenModels()]);
  const hidden=new Set(hiddenConnectionsList),hiddenModelIds=new Set(hiddenModelsList);
  return [...configured.filter(model=>model.provider!=='local'),...reachableSavedLocal,...discovered]
-  .filter(model=>!hidden.has(rootId(model.id))&&!hiddenModelIds.has(model.id));
+  .filter(model=>(model.provider!=='bai'||isAllowedBaiModel(model.model))&&!hidden.has(rootId(model.id))&&!hiddenModelIds.has(model.id));
 }
 function chooseFast(configs:ProviderConfig[]):ProviderConfig|undefined{
  const available=configs.filter(m=>m.available);
- return available.find(m=>m.provider==='glm'&&/glm-5\.3-flash/i.test(m.model))
+ return available.find(m=>m.provider==='bai'&&m.model==='minimax-m3.1-flash')
+  ||available.find(m=>m.provider==='glm'&&/flash/i.test(m.model))
+  ||available.find(m=>m.provider==='glm'&&m.effort==='low')
+  ||available.find(m=>m.provider==='glm')
+  ||available.find(m=>m.provider==='bai'&&m.model==='gpt-6-luna')
   ||available.find(m=>/flash|mini|haiku|turbo|small/i.test(m.model)&&m.effort!=='high')
   ||available.find(m=>m.effort==='low')
   ||available.find(m=>m.isDefault)
@@ -146,7 +149,8 @@ export async function saveConnection(raw:any){
  if(provider!=='local'&&!key)throw new Error('API 키를 입력해주세요.');
  const baseUrl=existing?.baseUrl||(provider==='openrouter'?'https://openrouter.ai/api/v1':provider==='bai'?'https://api.b.ai/v1':provider==='gemini'?'https://generativelanguage.googleapis.com/v1beta/openai':provider==='opencode'?'https://opencode.ai/inference/openai/v1':provider==='local'?validLocalBaseUrl(String(raw.baseUrl||'')):validBaseUrl(String(raw.baseUrl||'')));
  const requestedModel=String(raw.model||'').trim();if(!requestedModel||requestedModel.length>200)throw new Error('사용할 모델을 선택하거나 모델 ID를 입력해주세요.');
- const list=await listProviderModels(provider,baseUrl,key);
+ if(provider==='bai'&&!isAllowedBaiModel(requestedModel))throw new Error('B.AI는 MiniMax M3.1 Flash와 GPT-6 Luna만 사용할 수 있어요.');
+ const list=visibleProviderModels(provider,await listProviderModels(provider,baseUrl,key));
  if(!list.some(m=>m.id===requestedModel)&&!(provider==='openrouter'&&requestedModel==='openrouter/auto'))throw new Error('이 연결의 모델 목록에서 해당 모델을 찾지 못했어요. 모델 ID를 확인해주세요.');
  if(modelConnectionsHosted()){
   const session=await readVisitorModels();

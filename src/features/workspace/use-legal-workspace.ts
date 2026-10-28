@@ -78,6 +78,14 @@ export function useLegalWorkspace(){
  const deleteValue=cases.find(c=>c.id===deleteTarget);
  const applyInventory=(data:ModelInventory,id?:string)=>{setInventory(data);if(id){const match=data.models.find(m=>m.id===id)||data.models.find(m=>m.id.startsWith(id+':'));if(match){recordActivity('model',match.name);setPreferredModel(match.id);if(active)setCases(values=>values.map(c=>c.id===active.id?{...c,modelId:match.id}:c))}}};
  useEffect(()=>{if(typeof window!=='undefined'&&new URLSearchParams(window.location.search).has('showcase'))return;let alive=true;fetch('/api/models').then(r=>{if(!r.ok)throw new Error();return r.json()}).then(data=>{if(alive)setInventory(data)}).catch(()=>{if(alive)setError('모델 연결 목록을 읽지 못했어요. 모델 연결에서 다시 확인해주세요.')});return()=>{alive=false;requestAbort.current?.abort()}},[]);
+ // Existing conversations may still remember a B.AI model which this release blocks.
+ useEffect(()=>{
+  if(!hydrated||!inventory?.defaultId)return;
+  const valid=new Set(inventory.models.map(model=>model.id));
+  setCases(items=>items.some(item=>item.modelId?.startsWith('env:bai:')&&!valid.has(item.modelId))
+   ?items.map(item=>item.modelId?.startsWith('env:bai:')&&!valid.has(item.modelId)?{...item,modelId:inventory.defaultId}:item)
+   :items);
+ },[hydrated,inventory]);
  const expanded=useMemo(()=>expandRoadmap(current),[current]);
  const mapCase=useMemo(()=>({...current,nodes:expanded.nodes,edges:expanded.edges}),[current,expanded]);
  const showcaseSelection=activeId==='portfolio-showcase'?showcaseStage===13?'wage-request':showcaseStage===14||showcaseStage===15?'wage-labor':showcaseStage===16?'scenario:wage-labor:step:0':showcaseStage===17?'scenario:wage-labor:step:1':showcaseStage===18?'scenario:wage-labor:step:2':showcaseStage===19?'scenario:wage-labor:outcome:1':showcaseStage>=20?'scenario:wage-labor:outcome:0':null:null;
@@ -401,7 +409,8 @@ export function useLegalWorkspace(){
      if(requestAbort.current===controller){requestAbort.current=null;busyRef.current=false;setBusy(false)}
    }
  };
- const alternativeModel=inventory?.models.filter(model=>model.available&&model.id!==chosenModelId).sort((a,b)=>Number(a.provider===chosenModel?.provider)-Number(b.provider===chosenModel?.provider)||Number(b.provider==='openrouter')-Number(a.provider==='openrouter'))[0];
+ const fallbackRank=(provider:string,model:string,effort?:string)=>provider==='bai'&&model==='minimax-m3.1-flash'?0:provider==='glm'&&/flash/i.test(model)?1:provider==='glm'&&effort==='low'?2:provider==='glm'?3:provider==='bai'&&model==='gpt-6-luna'?4:5;
+ const alternativeModel=inventory?.models.filter(model=>model.available&&model.id!==chosenModelId).sort((a,b)=>fallbackRank(a.provider,a.model,a.effort)-fallbackRank(b.provider,b.model,b.effort))[0];
  const retryWithAlternative=()=>{if(!alternativeModel)return;setPreferredModel(alternativeModel.id);if(active)setCases(values=>values.map(value=>value.id===active.id?{...value,modelId:alternativeModel.id}:value));void submit(undefined,true,alternativeModel.id)};
  const example=()=>{setSelected(null);setHistoryOpen(false);setActiveId(null);if(captureMode.current){setPreviewCase(structuredClone(demo));setFocusId(null);setChatCollapsed(true)}};
  const fillInput=(text:string)=>{recordActivity('example',text);const armed=text===SHOWCASE_STORY&&!active?.messages.length;wageExampleArmedRef.current=armed;setWageExampleArmed(armed);setInput(text);setSelected(null);setChatCollapsed(false);setMobileView('chat');requestAnimationFrame(()=>inputRef.current?.focus())};

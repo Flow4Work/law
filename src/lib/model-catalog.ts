@@ -2,6 +2,13 @@ import 'server-only';
 import {validateModelEndpoint} from './model-endpoint';
 
 export type CatalogModel={id:string;name:string};
+/** Only these two B.AI models may be exposed or selected in this service. */
+export const BAI_ALLOWED_MODEL_IDS=['minimax-m3.1-flash','gpt-6-luna'] as const;
+export const isAllowedBaiModel=(model:string)=>BAI_ALLOWED_MODEL_IDS.some(id=>id===model);
+export function visibleProviderModels(provider:string,catalog:CatalogModel[]):CatalogModel[]{
+ if(provider!=='bai')return catalog;
+ return BAI_ALLOWED_MODEL_IDS.flatMap(id=>catalog.filter(item=>item.id===id));
+}
 export function catalogEndpoint(provider:string,baseUrl:string){
   return provider==='opencode'?'https://opencode.ai/inference/v1/models':baseUrl+'/models';
 }
