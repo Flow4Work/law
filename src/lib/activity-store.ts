@@ -18,22 +18,19 @@ async function readJournal(key:string):Promise<{value:Journal;etag?:string}>{
 let queue=Promise.resolve();
 export async function appendActivity(event:ActivityEvent){
  const key=day(Date.parse(event.at));
+ if(cloud()){
+  // Each event has a unique immutable object. Concurrent serverless requests
+  // never need to read, overwrite, or retry a shared daily document.
+  await put('activity/overflow/'+key+'/'+event.id+'.enc',encryptActivity({events:[event]}),{access:'private',addRandomSuffix:false,allowOverwrite:false,contentType:'application/octet-stream'});
+  return;
+ }
  const append=async()=>{
-  for(let attempt=0;attempt<6;attempt++){
-   const {value,etag}=await readJournal(key);
-   const next:Journal={events:[...(value.events||[]),event].slice(-2000),limited:value.limited||(value.events||[]).length>=2000};
-   const encrypted=encryptActivity(next);
-   if(!cloud()){await mkdir(root,{recursive:true});const temporary=path.join(root,key+'-'+randomUUID()+'.tmp');await writeFile(temporary,encrypted,{mode:0o600});await rename(temporary,path.join(root,key+'.enc'));return}
-   try{await put('activity/days/'+key+'.enc',encrypted,{access:'private',addRandomSuffix:false,contentType:'application/octet-stream',...(etag?{allowOverwrite:true,ifMatch:etag}:{allowOverwrite:false})});return}
-   catch(error){if(!conflicts(error)||attempt===5)throw error;await new Promise(resolve=>setTimeout(resolve,40*(attempt+1)))}
-  }
+  const {value}=await readJournal(key);
+  const next:Journal={events:[...(value.events||[]),event].slice(-2000),limited:value.limited||(value.events||[]).length>=2000};
+  await mkdir(root,{recursive:true});const temporary=path.join(root,key+'-'+randomUUID()+'.tmp');
+  await writeFile(temporary,encryptActivity(next),{mode:0o600});await rename(temporary,path.join(root,key+'.enc'));
  };
- const task=queue.then(append).catch(async error=>{
-  if(!cloud())throw error;
-  // A unique immutable file preserves the event even if the shared journal is
-  // contended, throttled or its latest ETag is not yet visible to another worker.
-  await put('activity/overflow/'+key+'/'+event.id+'.enc',encryptActivity({events:[event]}),{access:'private',addRandomSuffix:false,contentType:'application/octet-stream'});
- });
+ const task=queue.then(append);
  queue=task.catch(()=>{});return task;
 }
 export async function readActivityReport(days:number):Promise<ActivityReport>{

@@ -58,12 +58,14 @@ test('parallel serverless writers preserve all events; reports and rate limits s
  for(let i=0;i<5;i++)assert.equal(await (i%2?first:second).claimAdminAttempt('203.0.113.99'),true);
  assert.equal(await first.claimAdminAttempt('203.0.113.99'),false);
 });
-test('a failed shared journal write preserves an immutable private event and remains readable',async()=>{
+test('cloud ingestion never depends on overwriting a shared journal',async()=>{
  const store=fakeStore(),cipher=load('activity-crypto'),original=store.api.put;
- store.api.put=async(key,body,options)=>{if(key.startsWith('activity/days/'))throw Error('temporary shared journal failure');return original(key,body,options)};
+ let journalWrites=0;
+ store.api.put=async(key,body,options)=>{if(key.startsWith('activity/days/')){journalWrites++;throw Error('temporary shared journal failure')}return original(key,body,options)};
  const api=load('activity-store',{'@vercel/blob':store.api,'./activity-crypto':cipher});
  const event={id:'immutable-fallback-test',at:new Date().toISOString(),ip:'203.0.113.5',action:'query',detail:'test-only preserved question',city:'',district:'',country:'',location:'지역 확인 불가'};
  await api.appendActivity(event);
+ assert.equal(journalWrites,0);
  assert.equal(store.entries.size,1);
  assert([...store.entries.keys()][0].startsWith('activity/overflow/'));
  const report=await api.readActivityReport(1);assert.equal(report.total,1);assert.equal(report.events[0].detail,event.detail);
