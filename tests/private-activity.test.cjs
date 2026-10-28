@@ -8,7 +8,7 @@ const env={VERCEL:'1',LEGAL_CONNECTION_SECRET:secret,LEGAL_ADMIN_PATH:adminPath,
 function load(name,overrides={},extra={}){
  const source=fs.readFileSync(path.join(__dirname,'../src/lib',name+'.ts'),'utf8');
  const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
- const exports={};vm.runInNewContext(compiled,{exports,require:id=>id==='server-only'?{}:overrides[id]||require(id),process:{env:{...env,...extra},cwd:()=>'/test-workspace'},Buffer,Headers,Response,Date,setTimeout,console});return exports;
+ const exports={};vm.runInNewContext(compiled,{exports,require:id=>id==='server-only'?{}:overrides[id]||(id.startsWith('@/geo/')?require(path.join(__dirname,'../src/geo',id.slice(6))):require(id)),process:{env:{...env,...extra},cwd:()=>'/test-workspace'},Buffer,Headers,Response,Date,setTimeout,console});return exports;
 }
 test('password-only admin authentication checks the hash and expires signed sessions',()=>{
  const api=load('activity-crypto');
@@ -34,6 +34,37 @@ test('IP geolocation uses supplied city data and never invents a Seoul district'
  header.set('x-vercel-ip-city',encodeURIComponent('성동구'));assert.equal(activityLocation(header).district,'성동구');
  header.set('x-vercel-ip-country-region','26');header.set('x-vercel-ip-city','Jung-gu');assert.equal(activityLocation(header).district,'');
  assert.equal(activityLocation(new Headers()).location,'지역 확인 불가');
+});
+
+test('Seoul postcode evidence takes priority over approximate IP coordinates and marks disagreement',()=>{
+ const {activityLocation,seoulPostalDistrict}=load('activity-location');
+ assert.equal(seoulPostalDistrict('06090'),'강남구');assert.equal(seoulPostalDistrict('04524'),'중구');
+ for(const value of ['6090','99999','00000','06400','04524evil',''])assert.equal(seoulPostalDistrict(value),'');
+ const header=new Headers({'x-vercel-forwarded-for':'203.0.113.1','x-vercel-ip-country':'KR','x-vercel-ip-country-region':'11','x-vercel-ip-city':'Seoul','x-vercel-ip-postal-code':'06090','x-vercel-ip-latitude':'37.5638','x-vercel-ip-longitude':'126.9976'});
+ const value=activityLocation(header);assert.equal(value.district,'강남구');assert.equal(value.districtSource,'ip-postal');assert(value.locationNote.includes('서로 다릅니다'));
+ assert.equal('latitude' in value,false);assert.equal('longitude' in value,false);assert.equal('postalCode' in value,false);
+ header.set('x-vercel-ip-country','US');assert.equal(activityLocation(header).district,'');
+ header.set('x-vercel-ip-country','KR');header.set('x-vercel-ip-country-region','26');header.set('x-vercel-ip-city','Busan');assert.equal(activityLocation(header).district,'');
+});
+
+test('published postcode data covers all 25 Seoul districts without filling gaps or overlapping ranges',()=>{
+ const ranges=require('../src/geo/seoul-postal-districts.json');
+ assert.equal(new Set(ranges.map(row=>row[2])).size,25);
+ assert.equal(ranges.reduce((count,[start,end])=>count+end-start+1,0),5634);
+ for(let i=0;i<ranges.length;i++){assert(ranges[i][0]<=ranges[i][1]);if(i)assert(ranges[i-1][1]<ranges[i][0])}
+});
+
+test('IP points are classified against district polygons; missing, invalid and out-of-city points stay unknown',()=>{
+ const {seoulDistrictAt,activityLocation}=load('activity-location');
+ assert.equal(seoulDistrictAt(37.5172,127.0473),'강남구');
+ assert.equal(seoulDistrictAt(37.4836,127.0327),'서초구');
+ assert.equal(seoulDistrictAt(37.5663,126.9019),'마포구');
+ assert.equal(seoulDistrictAt(37.5638,126.9976),'중구');
+ assert.equal(seoulDistrictAt(35.1796,129.0756),'');assert.equal(seoulDistrictAt(NaN,127),'');
+ const header=new Headers({'x-vercel-ip-country':'KR','x-vercel-ip-country-region':'11','x-vercel-ip-city':'Seoul','x-vercel-ip-latitude':'37.5172','x-vercel-ip-longitude':'127.0473'});
+ assert.equal(activityLocation(header).district,'강남구');assert.equal(activityLocation(header).districtSource,'ip-coordinate');
+ for(const latitude of ['', '0', 'NaN', '37.5junk']){header.set('x-vercel-ip-latitude',latitude);assert.equal(activityLocation(header).district,'')}
+ header.delete('x-vercel-ip-latitude');assert.equal(activityLocation(header).district,'');
 });
 function fakeStore(){
  const entries=new Map();let revision=0;
