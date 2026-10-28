@@ -1,0 +1,14 @@
+node_modules/
+.next/
+.env*
+!.env.example
+data/
+*.tsbuildinfo
+
+# Local backups and generated QA captures
+.ux-backup/
+/*.png
+/tests/*.png
+*.before-law-showcase-*
+*.camera-backup
+*.showcase-scroll-backup

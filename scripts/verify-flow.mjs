@@ -1,0 +1,56 @@
+import {chromium} from 'playwright';
+const browser=await chromium.launch({channel:'chrome',headless:true});
+const page=await browser.newPage({viewport:{width:1500,height:900}});
+const checks=[];
+const check=(label,pass,detail='')=>{checks.push({label,pass,detail});console.log((pass?'PASS ':'FAIL ')+label+(detail?' '+detail:''));};
+try{
+ await page.goto('http://127.0.0.1:3700/',{waitUntil:'domcontentloaded',timeout:30000});
+ await page.locator('.app-shell').waitFor({timeout:20000});
+ await page.waitForTimeout(850);
+ check('new-visitor-start',await page.locator('.app-shell.is-start').count()===1);
+ check('no-empty-roadmap',await page.locator('.map-empty:visible').count()===0);
+ check('welcome-examples',await page.locator('.prompt-cards button').count()===3);
+ await page.screenshot({path:'verify-welcome.png'});
+ await page.locator('.conversation-tabs button[role=tab]').first().click();
+ await page.locator('.stage-card').first().waitFor({timeout:12000});
+ const original=await page.locator('.stage-card').count();
+ check('demo-paths',original>=4,'nodes='+original);
+ await page.locator('.stage-card').filter({hasText:'합의점을 법원에서 찾기'}).click();
+ await page.getByRole('button',{name:'이 방법으로 진행'}).click();
+ await page.locator('.stage-card.process-step').first().waitFor({timeout:12000});
+ await page.waitForTimeout(900);
+ const steps=await page.locator('.stage-card.process-step').count();
+ const outcomes=await page.locator('.stage-card.process-outcome').count();
+ check('expands-steps',steps>=3,'steps='+steps);
+ check('branches-into-outcomes',outcomes>=2,'outcomes='+outcomes);
+ check('map-detail-closes',await page.locator('.detail-panel').count()===0);
+ check('step-navigation-visible',await page.locator('.map-flow-navigation').count()===1);
+ await page.screenshot({path:'verify-expanded.png'});
+ await page.getByRole('button',{name:'다음 절차 보기'}).click();
+ check('step-navigation-advances',(await page.locator('.map-flow-navigation').innerText()).includes('2/6'));
+ await page.getByRole('button',{name:'이전 절차 보기'}).click();
+ await page.locator('.stage-card.process-step').first().click();
+ check('process-detail-opens',await page.locator('.detail-panel').count()===1);
+ const advance=page.getByRole('button',{name:'이 단계 마쳤어요 · 다음 보기'});
+ check('advances-current-process',await advance.count()===1);
+ if(await advance.count())await advance.click();
+ check('progress-advances',await page.locator('.stage-card.process-step.status-done').count()>=1);
+ await page.locator('.visual-header button.tab-add').click();
+ check('new-tab-start',await page.locator('.app-shell.is-start').count()===1);
+ check('no-blank-roadmap-after-new',await page.locator('.map-empty:visible').count()===0);
+ await page.evaluate(()=>{
+  const now=new Date().toISOString();
+  const existing=JSON.parse(localStorage.getItem('ai-legal-roadmap-cases-v1')||'[]');
+  existing.push({id:'test-case-title',name:'계약이 끝났는데 보증금을 안 돌려주고 있어요',createdAt:now,updatedAt:now,messages:[],nodes:[],edges:[],facts:[],sources:[],evidenceStatus:'unverified'});
+  localStorage.setItem('ai-legal-roadmap-cases-v1',JSON.stringify(existing));
+ });
+ await page.reload({waitUntil:'domcontentloaded'});
+ await page.waitForTimeout(700);
+ const tabs=await page.locator('.conversation-tab button[role=tab]').allTextContents();
+ check('meaningful-tab-title',tabs.some(x=>x.includes('보증금 반환 문제')),JSON.stringify(tabs));
+ check('tab-max-12',tabs.every(x=>Array.from(x.replace(/…$/,'')).length<=12));
+ await page.setViewportSize({width:390,height:844});
+ await page.waitForTimeout(500);
+ check('mobile-start-visible',await page.locator('.welcome-block:visible').count()===1);
+}catch(error){console.log('E2E_ERROR',error.stack||error.message);process.exitCode=1}
+finally{console.log('SUMMARY '+JSON.stringify(checks));if(checks.some(x=>!x.pass))process.exitCode=1;await browser.close()}

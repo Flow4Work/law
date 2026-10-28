@@ -1,0 +1,40 @@
+/* Compact content and quiet workspace controls; map geometry is unchanged. */
+.app-shell .roadmap-flow .stage-card .stage-description{display:block;white-space:pre-line;-webkit-line-clamp:unset;-webkit-box-orient:initial;overflow:visible;line-height:1.7;font-size:13px}
+.app-shell .detail-panel .detail-head{justify-content:flex-end;height:40px;flex-basis:40px}
+.app-shell .detail-panel .detail-summary strong{display:block;font-weight:650;color:var(--dp-ink);margin:0 0 7px}
+.app-shell .detail-panel .detail-summary>span{display:block}
+.app-shell .detail-panel .detail-metrics{grid-auto-flow:initial;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}
+.app-shell .detail-panel .detail-metrics small{display:block;margin-top:5px;font-size:11px;line-height:1.6;color:var(--dp-soft);overflow-wrap:anywhere}
+.app-shell .model-picker-trigger{max-width:260px;border-color:transparent;background:transparent;padding:4px 7px;border-radius:7px;height:34px}
+.app-shell .model-picker-trigger:hover,.app-shell .model-picker-trigger[aria-expanded=true]{border-color:var(--border);background:var(--soft)}
+.app-shell .model-picker-copy strong{font-size:12px;font-weight:550}
+.app-shell .model-picker-popover{position:fixed;inset:auto;margin:0;padding:0;width:min(330px,calc(100vw - 24px));border-radius:12px;box-shadow:0 12px 34px #0002}
+.app-shell .model-picker-popover:popover-open{display:flex;flex-direction:column}
+.app-shell .model-picker-popover>:not(.model-picker-options){flex-shrink:0}
+.app-shell .model-picker-heading{font-size:12px;padding:14px 14px 8px;border:0}
+.model-picker-search{display:flex;align-items:center;gap:7px;margin:0 10px 7px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;color:var(--muted);background:var(--soft)}
+.model-picker-search input{min-width:0;width:100%;padding:0;border:0;background:transparent;color:var(--text);outline:none;font-size:12px;line-height:1.6}
+.model-picker-search:focus-within{outline:2px solid var(--text);outline-offset:1px}
+.app-shell .model-picker-options{flex:0 1 auto;min-height:0;padding:0 6px 7px;max-height:310px;overflow-y:auto;overscroll-behavior:contain}
+.model-picker-group{padding:11px 8px 5px;font-size:10px;line-height:1.5;color:var(--muted)}
+.app-shell .model-picker-option{min-height:52px;padding:8px;border-radius:7px;gap:8px}
+.app-shell .model-picker-option>span{display:flex;flex-direction:column;gap:4px;min-width:0}
+.app-shell .model-picker-option strong{font-size:12px;font-weight:550;line-height:1.5;overflow-wrap:anywhere}
+.app-shell .model-picker-option small{font-size:10px;font-weight:400;color:var(--muted)}
+.app-shell .model-picker-option>svg{color:var(--text)}
+.model-picker-empty{padding:10px;font-size:12px;line-height:1.6;color:var(--muted)}
+.model-picker-manage{display:flex;align-items:center;gap:7px;width:100%;min-height:43px;border:0;border-top:1px solid var(--border);padding:11px 14px;background:transparent;color:var(--secondary);font-size:12px;text-align:left}
+.model-picker-manage:hover{background:var(--soft)}
+@media(min-width:861px){
+ .app-shell .chat-fold-toggle,.app-shell .chat-expand-toggle,.app-shell.dark .chat-fold-toggle,.app-shell.dark .chat-expand-toggle{min-height:30px;padding:6px 8px;gap:6px;border:1px solid transparent;background:transparent;color:var(--secondary);border-radius:6px;font-size:11px;font-weight:500;box-shadow:none}
+ .app-shell .chat-fold-toggle svg,.app-shell .chat-expand-toggle svg,.app-shell.dark .chat-fold-toggle svg,.app-shell.dark .chat-expand-toggle svg{color:var(--secondary);width:15px;height:15px}
+ .app-shell .chat-fold-toggle:hover,.app-shell .chat-expand-toggle:hover,.app-shell.dark .chat-fold-toggle:hover,.app-shell.dark .chat-expand-toggle:hover{background:var(--soft);border-color:var(--border);box-shadow:none;color:var(--text)}
+ .app-shell .chat-fold-toggle:focus-visible,.app-shell .chat-expand-toggle:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+}
+@media(max-width:860px){
+ .app-shell .journey-option>p,.app-shell .journey-route-head>p{display:block;white-space:pre-line;-webkit-line-clamp:unset;overflow:visible}
+ .app-shell .model-picker-trigger{height:40px;max-width:calc(100% - 44px)}
+ .model-picker-search input{font-size:16px}
+ .app-shell .model-picker-option{min-height:54px}
+}
+@media(prefers-reduced-motion:reduce){.app-shell .conversation-panel,.app-shell .chat-fold-toggle,.app-shell .chat-expand-toggle{transition:none}}

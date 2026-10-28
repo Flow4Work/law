@@ -1,0 +1,18 @@
+/* Map feedback occupies its own row, never covering map cards or the tab bar. */
+.map-feedback-row{position:relative;z-index:15;display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:6px 14px;background:var(--panel);border-bottom:1px solid var(--border)}
+.map-feedback-row:empty{display:none}
+.app-shell .map-feedback-row .completed-path{flex:1 1 215px;min-width:0;min-height:32px;padding:0;border:0;background:transparent}
+.map-notice{position:static;z-index:1;display:flex;align-items:center;gap:8px;max-width:min(460px,100%);padding:5px 6px 5px 10px;border:1px solid var(--border);border-radius:8px;background:var(--panel);color:var(--secondary);box-shadow:none;font-size:12px;line-height:1.5}
+.map-feedback-row .map-notice{flex:0 1 auto;min-width:0}
+.map-feedback-row .map-notice-status{min-width:0}
+.map-feedback-row .map-notice-status>span:last-child{overflow-wrap:anywhere;white-space:normal}
+.map-notice-status{display:flex;align-items:center;gap:7px;min-width:0}
+.map-notice-status>span:last-child{overflow-wrap:anywhere}
+.map-notice-icon{display:flex;flex:0 0 15px;color:var(--muted)}
+.map-notice.is-processing .map-notice-icon{animation:map-notice-spin 1.4s linear infinite}
+.map-notice-action{display:inline-flex;align-items:center;gap:3px;flex-shrink:0;border:0;border-radius:4px;background:var(--soft);color:var(--text);padding:5px 6px;font-size:11px}
+.map-notice-close{display:grid;place-items:center;flex:0 0 28px;width:28px;height:28px;border:0;border-radius:5px;background:transparent;color:var(--muted)}
+.map-notice-close:hover,.map-notice-action:hover{background:var(--soft);color:var(--text)}
+@keyframes map-notice-spin{to{transform:rotate(360deg)}}
+@media(max-width:860px){.map-notice{top:8px;left:10px;max-width:calc(100% - 20px);font-size:11px}.map-notice-close{width:32px;height:32px;flex-basis:32px}}
+@media(prefers-reduced-motion:reduce){.map-notice.is-processing .map-notice-icon{animation:none}}

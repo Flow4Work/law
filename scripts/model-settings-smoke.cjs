@@ -1,0 +1,47 @@
+const { chromium } = require('playwright');
+const assert = require('node:assert/strict');
+(async()=>{
+ const browser=await chromium.launch({headless:true,executablePath:'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'});
+ try{
+  const page=await browser.newPage({viewport:{width:1666,height:900},deviceScaleFactor:1});
+  const errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('http://127.0.0.1:3700/',{waitUntil:'domcontentloaded',timeout:30000});
+  await page.waitForFunction(()=>!document.body.innerText.includes('모델 불러오는 중'),{timeout:15000});
+  await page.getByRole('button',{name:'모델 연결과 설정'}).click();
+  const dialog=page.getByRole('dialog');
+  await dialog.waitFor();
+  assert.equal(await dialog.getByRole('tab').count(),2,'two main tabs');
+  await dialog.getByRole('tab',{name:/API 연결/}).click();
+  assert(await dialog.getByText('연결된 API',{exact:true}).isVisible());
+  const first=dialog.locator('.lm-managed').nth(1);
+  assert(await first.isVisible());
+  await page.route('**/api/models/catalog',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({models:[{id:'smoke-alpha',name:'Smoke Alpha'},{id:'smoke-beta',name:'Smoke Beta'}]})}));
+  const picker=first.getByRole('button',{name:/모델 변경/});
+  await picker.click();
+  await first.getByRole('radio',{name:/Smoke Beta/}).click();
+  assert(await first.getByRole('button',{name:'변경 확인'}).isEnabled());
+  assert.equal(await page.locator('.lm-managed-copy').first().innerText().then(t=>t.includes('Smoke Beta')),false,'selection does not apply yet');
+  await first.getByRole('button',{name:'취소'}).click();
+  await dialog.getByRole('button',{name:'새 API 연결'}).click();
+  await dialog.getByRole('button',{name:/Google Gemini/}).click();
+  assert(await dialog.getByText('Google Gemini').count()>0);
+  assert.equal(await dialog.getByRole('textbox',{name:'API 주소'}).count(),0,'fixed provider URL should not be edited');
+  await page.screenshot({path:'scripts/model-settings-smoke-desktop.png'});
+  await dialog.getByRole('tab',{name:/API 연결/}).click();
+  assert(await dialog.getByText('연결된 API',{exact:true}).isVisible());
+  const mobile=await browser.newPage({viewport:{width:390,height:844}});
+  mobile.on('pageerror',e=>errors.push(e.message));
+  await mobile.goto('http://127.0.0.1:3700/',{waitUntil:'domcontentloaded',timeout:30000});
+  await mobile.waitForFunction(()=>!document.body.innerText.includes('모델 불러오는 중'),{timeout:15000});
+  await mobile.getByRole('button',{name:'모델 연결과 설정'}).click();
+  await mobile.screenshot({path:'scripts/model-settings-smoke-mobile.png'});
+  const tabs=mobile.getByRole('tab',{name:/API 연결/});
+  console.log('MOBILE_DIALOG',await mobile.locator('dialog').count(),'TABS',await tabs.count());
+  if(await tabs.count())await tabs.click();
+  else throw new Error('Mobile settings tab is not available');
+  await mobile.screenshot({path:'scripts/model-settings-smoke-mobile.png'});
+  assert.equal(errors.length,0,errors.join('\n'));
+  console.log('SMOKE_OK tabs=2 model-choice-confirmed=false-before-confirm gemini=present mobile=rendered errors=0');
+ }finally{await browser.close()}
+})().catch(e=>{console.error(e);process.exit(1)});

@@ -1,0 +1,488 @@
+/* The workspace starts at the top edge. Global actions live in a narrow rail. */
+.app-shell{
+  display:grid;grid-template-columns:64px minmax(0,1fr);grid-template-rows:minmax(0,1fr);
+}
+.workspace-rail{
+  grid-column:1;grid-row:1;display:flex;flex-direction:column;align-items:center;
+  gap:22px;padding:14px 7px 12px;min-height:0;
+  background:var(--panel);border-right:1px solid var(--border);z-index:30;
+}
+.rail-brand{display:grid;place-items:center;width:34px;height:34px;flex-shrink:0;border-radius:10px;background:var(--soft);color:var(--text)}
+.rail-menu,.rail-utilities{display:flex;flex-direction:column;align-items:center;gap:8px;width:100%}
+.rail-utilities{margin-top:auto;gap:6px}
+.rail-button{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+  width:48px;min-height:52px;padding:8px 3px;border:0;border-radius:9px;
+  background:transparent;color:var(--muted);font-size:10px;font-weight:550;line-height:1.3;
+}
+.rail-button:hover,.rail-button.is-active{background:var(--soft);color:var(--text)}
+.rail-button:disabled{opacity:.4;cursor:not-allowed}
+.rail-new{background:var(--soft);color:var(--text)}
+.rail-theme{min-height:40px}
+.workspace-rail .case-menu{position:fixed;left:72px;right:auto;top:142px;width:320px;max-height:calc(100dvh - 160px);border-radius:12px}
+.workspace-rail .popover-shield{z-index:59}
+.app-shell>.main-panels{grid-column:2;grid-row:1;min-width:0;height:100%;margin:0}
+.app-shell .conversation-panel{border-radius:0}
+.app-shell .visual-panel{flex-direction:row;min-height:0;overflow:hidden}
+.map-workspace{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;position:relative;overflow:hidden}
+.app-shell .diagram-content{margin:0;border:0;border-radius:0}
+.app-shell .detail-panel{border-radius:0;box-shadow:none}
+
+/* Confirmed situation: green label, barely tinted surface, neutral outline. */
+.app-shell.light .diagram-content{--map-background:#f8f9fb;--map-grid-line:#e5e6e8}
+.app-shell.dark .diagram-content{--map-background:#151719;--map-grid-line:#242729}
+.app-shell.light .stage-card.situation-card{background:#f7faf8;border-color:#dfe2e0;box-shadow:0 3px 12px #00000004}
+.app-shell.light .situation-card .stage-pill{background:#e6f2ea;color:#2f6c48}
+.app-shell.light .situation-card .stage-title{color:var(--text)}
+.app-shell.light .situation-card .stage-description{color:var(--secondary)}
+.app-shell.light .situation-card .stage-card-footer{color:var(--muted)}
+.app-shell.light .situation-card .stage-card-footer>span:last-child{color:var(--secondary)}
+.app-shell.light .stage-card.situation-card.selected{border-color:#a9b4ae;box-shadow:0 0 0 1px #a9b4ae24}
+.app-shell.dark .stage-card.situation-card{background:#191f1c;border-color:#363c38;box-shadow:none}
+.app-shell.dark .situation-card .stage-pill{background:#253c2e;color:#a9cfb6}
+.app-shell.dark .situation-card .stage-title{color:var(--text)}
+.app-shell.dark .situation-card .stage-description,.app-shell.dark .situation-card .stage-card-footer{color:var(--secondary)}
+.app-shell.dark .situation-card .stage-card-footer>span:last-child{color:var(--secondary)}
+.app-shell.dark .stage-card.situation-card.selected{border-color:#76867c}
+.app-shell.light .mobile-journey{background:#f5f5f6}
+.app-shell.light .journey-origin{background:#f7faf8;border-color:#dfe2e0}
+.app-shell.light .journey-origin-dot{background:#528568;box-shadow:none}
+.app-shell.light .journey-origin .journey-eyebrow{display:inline-block;padding:2px 7px;border-radius:5px;background:#e6f2ea;color:#2f6c48}
+.app-shell.light .journey-origin-description{color:var(--secondary)}
+.app-shell.dark .mobile-journey{background:#111315}
+.app-shell.dark .journey-origin{background:#191f1c;border-color:#363c38}
+.app-shell.dark .journey-origin-dot{background:#a9cfb6;box-shadow:none}
+.app-shell.dark .journey-origin .journey-eyebrow{display:inline-block;padding:2px 7px;border-radius:5px;background:#253c2e;color:#a9cfb6}
+.app-shell.dark .journey-origin-description{color:var(--secondary)}
+
+/* The next action is part of the answer, with a quiet divider instead of a callout. */
+.app-shell .conversation-panel .next-action{margin-top:18px;padding:12px 0 0;border:0;border-top:1px solid var(--border);border-radius:0;background:transparent;box-shadow:none}
+.app-shell .conversation-panel .next-action .answer-label{display:flex;align-items:center;gap:6px;margin-bottom:7px;color:var(--secondary);font-size:12px;font-weight:600}
+.app-shell .conversation-panel .next-action .answer-label>svg{flex-shrink:0;color:var(--muted)}
+.app-shell .conversation-panel .next-action p{color:var(--secondary);font-size:13px;line-height:1.8}
+@media(min-width:861px){
+  .app-shell .mobile-navigation{display:none}
+  .app-shell .chat-top.has-messages,.app-shell:not(.is-start) .chat-top.has-messages{
+    height:48px;min-height:48px;max-height:48px;flex:0 0 48px;padding:0 22px;
+    display:flex;align-items:center;border-bottom:1px solid var(--border);
+  }
+  .app-shell .visual-header,.app-shell:not(.is-start) .visual-header{
+    height:48px;min-height:48px;max-height:48px;flex:0 0 48px;padding:0 12px;
+  }
+  .app-shell .detail-panel{height:100%;flex:0 0 clamp(310px,25vw,390px);width:clamp(310px,25vw,390px)}
+  .app-shell .detail-head{height:48px;min-height:48px;flex:0 0 48px}
+  .app-shell .visual-tools{gap:4px}
+  .app-shell .visual-header .conversation-tabs{margin:0 8px 0 0}
+  .app-shell .visual-tools button{flex-shrink:0}
+  .app-shell .has-details .refresh-map>span,.app-shell .has-details .sources-trigger>span{display:none}
+}
+@media(min-width:861px) and (max-width:1250px){
+  .app-shell .refresh-map>span,.app-shell .sources-trigger>span{display:none}
+  .app-shell:not(.is-start) .conversation-panel{width:330px;flex-basis:330px}
+}
+@media(max-width:860px){
+  .app-shell{grid-template-columns:minmax(0,1fr);grid-template-rows:52px 52px minmax(0,1fr)}
+  .workspace-rail{grid-column:1;grid-row:1;flex-direction:row;gap:12px;padding:4px 12px;border-right:0;border-bottom:1px solid var(--border)}
+  .rail-brand{width:30px;height:30px}
+  .rail-menu,.rail-utilities{flex-direction:row;gap:2px;width:auto}
+  .rail-utilities{margin:0 0 0 auto}
+  .rail-button{width:38px;min-height:40px;padding:6px;gap:0}
+  .rail-button>span{display:none}
+  .rail-menu>.rail-button:not(.rail-new){display:none}
+  .workspace-rail .case-menu{top:56px;left:12px;right:12px;width:auto;max-height:calc(100dvh - 72px)}
+  .app-shell>.mobile-navigation{grid-column:1;grid-row:2;margin:6px 12px;min-height:40px;flex:auto}
+  .app-shell>.main-panels{grid-column:1;grid-row:3}
+  .app-shell .visual-panel{flex-direction:row}
+  .app-shell .detail-panel{border-radius:14px 14px 0 0}
+}
+
+
+
+/* 2026-10-27: neutral fact cards, actionable chat guidance, inline history, compact settings. */
+.app-shell.light .roadmap-flow .stage-card.situation-card,
+.app-shell.light .stage-card.situation-card,
+.app-shell.light .journey-origin{
+  background:var(--panel);
+  border-color:var(--border);
+  box-shadow:none;
+}
+.app-shell.dark .roadmap-flow .stage-card.situation-card,
+.app-shell.dark .stage-card.situation-card,
+.app-shell.dark .journey-origin{
+  background:var(--panel);
+  border-color:var(--border);
+  box-shadow:none;
+}
+.app-shell.light .situation-card .stage-pill,
+.app-shell.light .journey-origin .journey-eyebrow{
+  background:#f0f0f1;
+  color:#565b64;
+}
+.app-shell.dark .situation-card .stage-pill,
+.app-shell.dark .journey-origin .journey-eyebrow{
+  background:#2b2d31;
+  color:#d6d7dc;
+}
+.app-shell .journey-origin-dot{background:var(--secondary);box-shadow:none}
+.app-shell.light .stage-card.situation-card.selected{
+  background:var(--panel);
+  border-color:var(--accent);
+  box-shadow:0 0 0 1px var(--accent);
+}
+.app-shell.dark .stage-card.situation-card.selected{
+  background:var(--panel);
+  border-color:var(--accent);
+  box-shadow:0 0 0 1px var(--accent);
+}
+/* Action summary: neutral reading surface with one small forward cue. */
+.app-shell.light .conversation-panel .next-action{
+  margin:19px 0 4px;
+  padding:16px 17px 18px;
+  background:#fafafa;
+  border:1px solid #e5e6e8;
+  border-left:3px solid #ce4954;
+  border-radius:12px;
+  box-shadow:0 3px 12px rgba(28,32,38,.035);
+}
+.app-shell.dark .conversation-panel .next-action{
+  margin:19px 0 4px;
+  padding:16px 17px 18px;
+  background:#222a34;
+  border:1px solid #394350;
+  border-left:3px solid #e0757d;
+  border-radius:12px;
+  box-shadow:0 4px 14px rgba(0,0,0,.08);
+}
+.app-shell .conversation-panel .next-action-heading{
+  display:flex;align-items:center;gap:9px;margin-bottom:9px;
+}
+.app-shell .conversation-panel .next-action-symbol{
+  display:grid;place-items:center;flex:0 0 25px;width:25px;height:25px;
+  background:#fbecef;border-radius:7px;color:#b83240;
+}
+.app-shell.dark .conversation-panel .next-action-symbol{
+  background:#453038;color:#f19ba3;
+}
+.app-shell .conversation-panel .next-action-heading strong{
+  font-size:15px;font-weight:750;color:var(--text);line-height:1.45;letter-spacing:-.3px;
+}
+.app-shell .conversation-panel .next-action p{
+  margin:0;color:var(--secondary);font-size:14px;line-height:1.78;
+  word-break:keep-all;overflow-wrap:anywhere;
+}
+
+/* History takes the chat pane's place; no floating menu or conversation composer. */
+.app-shell .history-heading{display:flex;justify-content:space-between;align-items:center}
+.app-shell .history-heading span{font-size:12px;color:var(--muted);font-weight:600}
+.app-shell .history-list{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:15px 13px 28px}
+.app-shell .history-list-intro{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:3px 8px 14px;font-size:12px;font-weight:650;color:var(--secondary)}
+.app-shell .history-list-intro button{display:inline-flex;align-items:center;gap:3px;border:0;border-radius:7px;background:var(--soft);padding:7px 9px;font-size:12px;font-weight:650;color:var(--text)}
+.app-shell .history-empty{font-size:13px;line-height:1.7;color:var(--secondary);padding:15px 9px}
+.app-shell .history-entry{display:flex;align-items:center;min-width:0;gap:0;border:1px solid transparent;border-radius:10px;margin:4px 0;background:transparent}
+.app-shell .history-entry:hover{background:var(--soft)}
+.app-shell .history-entry.active{background:var(--soft);border-color:var(--border)}
+.app-shell .history-entry-open{display:flex;align-items:center;gap:10px;flex:1;min-width:0;text-align:left;background:transparent;border:0;color:var(--text);padding:12px 2px 12px 10px}
+.app-shell .history-entry-icon{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;border-radius:9px;background:var(--panel);border:1px solid var(--border);color:var(--secondary)}
+.app-shell .history-entry-copy{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.app-shell .history-entry-copy strong{font-size:13px;line-height:1.35;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app-shell .history-entry-copy>span{font-size:12px;line-height:1.4;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app-shell .history-entry time{font-size:10px;white-space:nowrap;color:var(--muted);flex-shrink:0;margin-left:4px;align-self:flex-start;padding-top:3px}
+.app-shell .history-entry-delete{display:grid;place-items:center;flex:0 0 29px;width:29px;height:30px;border:0;border-radius:7px;background:transparent;color:var(--muted);opacity:0;margin-right:4px}
+.app-shell .history-entry:hover .history-entry-delete,
+.app-shell .history-entry:focus-within .history-entry-delete{opacity:1}
+.app-shell .history-entry-delete:hover{background:var(--panel);color:var(--text)}
+.app-shell .history-entry-open:focus-visible,.app-shell .history-entry-delete:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.app-shell .history-example{display:flex;align-items:center;gap:8px;width:100%;margin-top:15px;padding:12px 13px;background:transparent;border:1px solid var(--border);border-radius:9px;color:var(--secondary);font-size:12px;text-align:left}
+.app-shell .history-example>svg:last-child{margin-left:auto}
+.app-shell .history-example:hover{background:var(--soft);color:var(--text)}
+
+/* Settings: one compact surface, readable rows, and advanced connection behind a disclosure. */
+.model-dialog{width:min(570px,calc(100vw - 28px));max-height:85dvh;border-radius:14px;box-shadow:0 22px 70px #0004}
+.model-dialog .settings-heading{align-items:center;padding:20px 23px 17px}
+.model-dialog .settings-heading h2{font-size:20px;line-height:1.4;margin-bottom:3px;letter-spacing:-.4px}
+.model-dialog .settings-heading p{font-size:12.5px;line-height:1.6}
+.model-dialog .settings-heading .icon-btn{border-radius:8px}
+.model-dialog .settings-scroll{max-height:calc(85dvh - 82px);padding:18px 23px 25px}
+.model-dialog h3{font-size:14px;font-weight:750;margin:0 0 12px;color:var(--text)}
+.model-dialog .settings-connections{margin:0}
+.model-dialog .connection-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.model-dialog .connection-summary>div{display:flex;align-items:center;justify-content:space-between;gap:7px;min-height:40px;padding:9px 11px;background:var(--soft);border:1px solid transparent;border-radius:8px}
+.model-dialog .connection-summary strong{font-size:12px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.model-dialog .connection-summary span{float:none;flex-shrink:0;font-size:11px;margin:0;font-weight:650}
+.model-dialog .connection-summary .connection-ok{color:var(--secondary)}
+.model-dialog .connection-summary .connection-ok:before{content:'';display:inline-block;width:6px;height:6px;background:var(--secondary);border-radius:50%;margin-right:5px;vertical-align:middle}
+.model-dialog .connection-summary .connection-missing{color:var(--muted)}
+.model-dialog .model-existing{margin-top:26px}
+.model-dialog .settings-section-title{margin-bottom:3px}
+.model-dialog .settings-count{font-size:11px;font-weight:700;color:var(--muted);background:var(--soft);padding:2px 6px;border-radius:6px;margin-left:4px}
+.model-dialog .settings-section-title button{font-size:12px;min-height:34px;padding:7px 9px}
+.model-dialog .existing-model{padding:10px 1px;gap:8px}
+.model-dialog .existing-model strong{display:block;font-size:13px;font-weight:700}
+.model-dialog .existing-model small{font-size:11px;line-height:1.5;margin-top:3px}
+.model-dialog .existing-model p{font-size:12px;margin:4px 0 0}
+.model-dialog .existing-model>button{min-height:32px;padding:7px 10px;font-size:11px;font-weight:600}
+.model-dialog .connection-form{margin-top:22px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.model-dialog .connection-form>summary{display:flex;align-items:center;gap:10px;padding:14px;cursor:pointer;list-style:none;font-size:13px;font-weight:700;color:var(--text)}
+.model-dialog .connection-form>summary::-webkit-details-marker{display:none}
+.model-dialog .connection-summary-hint{margin-left:auto;color:var(--muted);font-size:11px;font-weight:500}
+.model-dialog .connection-form>summary:after{content:'';width:7px;height:7px;border-right:1.5px solid var(--secondary);border-bottom:1.5px solid var(--secondary);transform:rotate(45deg);margin-left:3px;transition:transform .15s}
+.model-dialog .connection-form[open]>summary:after{transform:rotate(225deg)}
+.model-dialog .connection-form-body{padding:2px 15px 16px;border-top:1px solid var(--border)}
+.model-dialog .connection-form label{font-size:12px;gap:6px;margin:13px 0}
+.model-dialog .connection-note{font-size:12px;line-height:1.7;margin:12px 0}
+.model-dialog .catalog-button,.model-dialog .connection-form .step-primary{font-size:12px}
+@media(max-width:860px){
+ .app-shell .history-entry-delete{opacity:1}
+ .model-dialog .settings-scroll{padding:15px 16px}
+ .model-dialog .settings-heading{padding:17px 16px}
+}
+@media(max-width:450px){
+ .model-dialog .connection-summary{grid-template-columns:1fr}
+ .app-shell .history-entry{margin:3px 0}
+ .app-shell .history-entry-open{gap:8px;padding-left:6px}
+ .app-shell .history-entry time{font-size:10px}
+}
+
+/* The map stays quietly neutral: faint, diffused light instead of a visible two-tone sweep. */
+.app-shell.light .diagram-content,
+.app-shell.light .mobile-journey,
+.app-shell.light .mobile-roadmap-list{
+  background-color:#f8f9fb;
+  background-image:
+    radial-gradient(ellipse 72% 90% at -15% 0%,rgba(231,180,79,.045),transparent 82%),
+    radial-gradient(ellipse 85% 100% at 115% 100%,rgba(77,123,193,.045),transparent 82%);
+}
+.app-shell.dark .diagram-content,
+.app-shell.dark .mobile-journey,
+.app-shell.dark .mobile-roadmap-list{background:#151719}
+.app-shell .diagram-content .graph-wrapper,
+.app-shell .diagram-content .canvas-surface,
+.app-shell .diagram-content .roadmap-flow{
+  background:transparent;
+}
+.app-shell.light .roadmap-flow .stage-card.situation-card{
+  background:var(--panel);
+  border:1px solid rgba(24,28,35,.29);
+  box-shadow:0 2px 12px #1b253008;
+}
+.app-shell.dark .roadmap-flow .stage-card.situation-card{
+  background:var(--panel);
+  border:1px solid rgba(243,245,248,.36);
+  box-shadow:none;
+}
+.app-shell.light .roadmap-flow .stage-card.situation-card.selected,
+.app-shell.dark .roadmap-flow .stage-card.situation-card.selected{
+  border-color:var(--accent);
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 22%,transparent);
+}
+/* The clicked card is strong red; earlier cards on that exact path stay soft red.
+   No unrelated siblings or descendants are given an outline. */
+.app-shell.light .roadmap-flow .react-flow__node.roadmap-node-ancestor .stage-card:not(.selected){
+  border-color:#e8a0a7;
+  box-shadow:0 0 0 1px #e8a0a726;
+}
+.app-shell.dark .roadmap-flow .react-flow__node.roadmap-node-ancestor .stage-card:not(.selected){
+  border-color:#b96b76;
+  box-shadow:0 0 0 1px #b96b762e;
+}
+
+/* History is a clean reading list, not a stack of tinted cards. */
+.app-shell .history-list{padding:15px 14px 28px}
+.app-shell .history-list-intro{
+  padding:2px 2px 14px;
+  font-size:12px;font-weight:650;color:var(--secondary);
+}
+.app-shell .history-list-intro button{
+  min-height:33px;padding:6px 10px;gap:5px;
+  border:1px solid var(--border);background:var(--panel);
+  border-radius:8px;font-size:12px;font-weight:650;
+  transition:background .15s,border-color .15s;
+}
+.app-shell .history-list-intro button:hover{background:var(--soft);border-color:#c9cdd2}
+.app-shell .history-entry{
+  position:relative;align-items:stretch;margin:0 0 9px;
+  border:1px solid #e6e7ea;border-radius:12px;
+  background:var(--panel);box-shadow:0 2px 10px rgba(24,29,35,.025);
+  transition:border-color .16s,box-shadow .16s;
+}
+.app-shell.dark .history-entry{border-color:#343d49;box-shadow:0 3px 12px rgba(0,0,0,.08)}
+.app-shell .history-entry:hover{
+  background:var(--panel);border-color:#bdc1c8;
+  box-shadow:0 4px 14px rgba(24,29,35,.06);
+}
+.app-shell.dark .history-entry:hover{border-color:#65707e}
+.app-shell .history-entry.active{
+  background:var(--panel);border-color:#cfd2d7;
+  box-shadow:0 3px 13px rgba(24,29,35,.05);
+}
+.app-shell.dark .history-entry.active{background:var(--panel);border-color:#71808e}
+.app-shell .history-entry.active::before{
+  content:'';position:absolute;left:-1px;top:17px;bottom:17px;
+  width:3px;background:#c74853;border-radius:0 3px 3px 0;
+}
+.app-shell .history-entry-open{
+  gap:0;align-items:flex-start;padding:15px 5px 15px 17px;
+}
+.app-shell .history-entry-copy{gap:7px}
+.app-shell .history-entry .history-entry-title{
+  display:flex;align-items:center;gap:8px;
+  overflow:hidden;white-space:normal;min-width:0;
+}
+.app-shell .history-entry-title strong{
+  flex:1;min-width:0;font-size:14px;line-height:1.48;
+  font-weight:730;color:var(--text);
+  white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;
+  -webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;
+}
+.app-shell .history-entry .history-current{
+  flex-shrink:0;font-size:10px;line-height:18px;
+  font-weight:700;color:#a93642;
+  border-radius:5px;padding:0 5px;background:#fdf0f1;
+}
+.app-shell.dark .history-entry .history-current{color:#f09aa2;background:#3c3038}
+.app-shell .history-entry .history-entry-preview{
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
+  white-space:normal;overflow:hidden;text-overflow:ellipsis;
+  font-size:13px;line-height:1.55;color:var(--secondary);
+  overflow-wrap:anywhere;word-break:keep-all;
+}
+.app-shell .history-entry .history-entry-meta{
+  display:flex;align-items:center;flex-wrap:wrap;gap:7px;
+  overflow:visible;white-space:normal;text-overflow:clip;
+  color:var(--muted);font-size:11px;line-height:1.4;
+}
+.app-shell .history-entry .history-entry-meta time{
+  font-size:11px;margin:0;padding:0;align-self:auto;color:var(--muted);
+}
+.app-shell .history-entry-meta>span{
+  border:0;padding:0;display:inline-flex;align-items:center;gap:7px;
+}
+.app-shell .history-entry-meta>span::before{
+  content:'';width:3px;height:3px;background:currentColor;
+  border-radius:50%;opacity:.65;
+}
+.app-shell .history-entry-delete{
+  align-self:flex-start;flex:0 0 29px;width:29px;height:30px;
+  margin:10px 6px 0 0;border-radius:7px;opacity:0;
+}
+.app-shell .history-entry:hover .history-entry-delete,
+.app-shell .history-entry:focus-within .history-entry-delete{opacity:1}
+.app-shell .history-entry-delete:hover{background:var(--soft);color:#b83b49}
+@media(max-width:860px){
+ .app-shell .history-entry-delete{opacity:.8}
+}
+
+/* Match the factual card outline in the mobile map. */
+.app-shell.light .journey-origin{background:var(--panel);border-color:rgba(24,28,35,.29)}
+.app-shell.dark .journey-origin{background:var(--panel);border-color:rgba(243,245,248,.36)}
+
+/* 2026-10-27: one-click conversation fold, with visible controls at both ends. */
+@media(min-width:861px){
+  .app-shell .conversation-panel{
+    transition:width .22s ease,flex-basis .22s ease;
+  }
+  .app-shell:not(.is-start).chat-collapsed .conversation-panel{
+    width:0!important;flex:0 0 0!important;min-width:0!important;
+    border:0!important;visibility:hidden;pointer-events:none;overflow:hidden;
+  }
+  .app-shell.chat-collapsed .visual-panel{flex:1 1 auto;min-width:0}
+  .app-shell .chat-top{position:relative}
+  .app-shell .chat-top.has-messages .chat-fold-toggle{margin-left:auto}
+  .app-shell .chat-top.history-heading .chat-fold-toggle{margin-left:8px}
+  .app-shell .chat-top:not(.has-messages) .chat-fold-toggle{
+    position:absolute;top:13px;right:17px;
+  }
+  .app-shell .chat-fold-toggle,.app-shell .chat-expand-toggle{
+    display:inline-flex;align-items:center;justify-content:center;
+    gap:7px;flex:0 0 auto;min-height:34px;padding:7px 10px;
+    border:1px solid #e5d9d8;border-radius:8px;
+    background:#fff8f6;color:#6e3231;cursor:pointer;
+    font-size:12px;font-weight:700;line-height:1.4;white-space:nowrap;
+    transition:background .14s,border-color .14s,box-shadow .14s;
+  }
+  .app-shell .chat-fold-toggle svg,.app-shell .chat-expand-toggle svg{
+    flex-shrink:0;color:#c43c32;
+  }
+  .app-shell .chat-fold-toggle:hover,.app-shell .chat-expand-toggle:hover{
+    background:#fff0ec;border-color:#e8bdb5;
+    box-shadow:0 2px 9px rgba(155,58,48,.08);
+  }
+  .app-shell .chat-expand-toggle{
+    margin-right:6px;border-color:#e5bcb4;background:#fff1ed;
+  }
+  .app-shell.dark .chat-fold-toggle,.app-shell.dark .chat-expand-toggle{
+    background:#292020;border-color:#593835;color:#f0c5be;
+  }
+  .app-shell.dark .chat-fold-toggle svg,.app-shell.dark .chat-expand-toggle svg{
+    color:#f0a097;
+  }
+  .app-shell.dark .chat-fold-toggle:hover,.app-shell.dark .chat-expand-toggle:hover{
+    background:#3b2725;border-color:#9a534c;
+  }
+}
+@media(max-width:860px){
+  .app-shell .chat-fold-toggle,.app-shell .chat-expand-toggle{display:none!important}
+}
+/* Replacing purple-toned burgundy with warm, muted scarlet in cards and route accents. */
+.app-shell.light .roadmap-flow .stage-card .stage-pill.stage-keyword{
+  background:#fff1ed;color:#b63830;border:1px solid #f2d6d0;
+}
+.app-shell.dark .roadmap-flow .stage-card .stage-pill.stage-keyword{
+  background:#39221f;color:#f5aca2;border:1px solid #71413c;
+}
+.app-shell.light .roadmap-flow .react-flow__node-stage .stage-card:not(.selected){
+  box-shadow:0 4px 16px rgba(164,74,64,.045),0 1px 4px rgba(40,36,48,.025);
+}
+.app-shell.light .roadmap-flow .react-flow__node-stage .stage-card:not(.selected):hover{
+  box-shadow:0 6px 19px rgba(164,74,64,.075),0 1px 5px rgba(40,36,48,.03);
+}
+.app-shell.dark .roadmap-flow .react-flow__node-stage .stage-card:not(.selected){
+  box-shadow:0 4px 17px rgba(0,0,0,.22),0 0 16px rgba(205,80,68,.025);
+}
+.app-shell .completed-path-dot{
+  background:#c43c32;box-shadow:0 0 0 3px rgba(196,60,50,.07);
+}
+.app-shell.dark .completed-path-dot{
+  background:#f1a197;box-shadow:0 0 0 3px rgba(241,161,151,.09);
+}
+@media(max-width:860px){
+  .app-shell.light .mobile-journey{
+    --route-1:#c43c32;--route-2:#c84940;--route-3:#b94038;--route-4:#ae4e43;
+  }
+  .app-shell.dark .mobile-journey{
+    --route-1:#f1a197;--route-2:#e9938a;--route-3:#e39d91;--route-4:#d9968c;
+  }
+  .app-shell.light .journey-option{box-shadow:0 4px 15px rgba(164,74,64,.04)}
+  .app-shell.dark .journey-option{
+    box-shadow:0 4px 16px rgba(0,0,0,.20),0 0 12px rgba(205,80,68,.025);
+  }
+}
+/* Current situation is a factual, neutral surface; no light-blue panel or badge. */
+.app-shell.light .roadmap-flow .stage-card.situation-card,
+.app-shell.light .roadmap-flow .stage-card.situation-card.status-current,
+.app-shell.light .roadmap-flow .stage-card.situation-card.status-current.selected{
+  background:#fff;
+  border-color:rgba(31,34,40,.30);
+}
+.app-shell.dark .roadmap-flow .stage-card.situation-card,
+.app-shell.dark .roadmap-flow .stage-card.situation-card.status-current,
+.app-shell.dark .roadmap-flow .stage-card.situation-card.status-current.selected{
+  background:var(--panel);
+  border-color:rgba(240,242,245,.35);
+}
+.app-shell.light .roadmap-flow .stage-card.situation-card .stage-pill,
+.app-shell.light .roadmap-flow .stage-card.situation-card .stage-pill.current{
+  background:#f2f2f3;color:#565960;border:0;
+}
+.app-shell.dark .roadmap-flow .stage-card.situation-card .stage-pill,
+.app-shell.dark .roadmap-flow .stage-card.situation-card .stage-pill.current{
+  background:#2a2b2e;color:#d0d1d4;border:0;
+}
+.app-shell.light .journey-origin,
+.app-shell.light .mobile-journey .journey-origin{
+  background:#fff;border-color:rgba(31,34,40,.30);
+}
+.app-shell.dark .journey-origin,
+.app-shell.dark .mobile-journey .journey-origin{
+  background:var(--panel);border-color:rgba(240,242,245,.35);
+}

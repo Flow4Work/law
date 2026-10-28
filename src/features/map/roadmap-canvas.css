@@ -1,0 +1,999 @@
+/* The diagram fills its allotted panel: the only moving layer is React Flow's viewport. */
+.diagram-content{
+  --map-background:#fcfaf9;
+  --map-grid-line:#eae4e3;
+  margin:0;
+  border:0;
+  border-radius:0;
+  min-height:0;
+  overflow:hidden;
+  background:var(--map-background);
+  isolation:isolate;
+}
+.graph-wrapper{
+  min-height:0;
+  min-width:0;
+  overflow:hidden;
+  background:transparent;
+}
+.desktop-roadmap,.canvas-surface{width:100%;height:100%;min-width:0;min-height:0;overflow:hidden}
+.roadmap-flow{
+  width:100%;
+  height:100%;
+  background:var(--map-background);
+  touch-action:none;
+}
+.roadmap-flow .react-flow__background{background-color:transparent;opacity:1}
+.roadmap-flow .react-flow__edge-path{stroke-linecap:round;stroke-linejoin:round}
+.roadmap-flow .react-flow__edge-textbg{fill:var(--map-background)!important}
+.roadmap-flow .react-flow__pane,.roadmap-flow .react-flow__viewport{cursor:grab}
+.roadmap-flow .react-flow__pane:active{cursor:grabbing}
+.map-status{
+  position:absolute;
+  top:15px;
+  left:19px;
+  z-index:11;
+  display:inline-flex;
+  align-items:center;
+  gap:9px;
+  max-width:min(530px,calc(100% - 118px));
+  min-height:34px;
+  padding:7px 11px;
+  background:rgba(255,255,255,.93);
+  color:#46566a;
+  border:1px solid #e7ebf0;
+  border-radius:8px;
+  font-size:14px;
+  line-height:1.45;
+  box-shadow:0 2px 7px #273a5310;
+  pointer-events:none;
+}
+.map-status>span:last-child{min-width:0;overflow-wrap:anywhere}
+.map-status-dot{width:11px;height:11px;flex:0 0 11px;border-radius:50%;background:#8da5bd}
+.map-status.is-processing .map-status-dot,.map-status.is-awaiting .map-status-dot{background:var(--blue);animation:roadmap-status-pulse 1.6s ease-in-out infinite}
+.map-status.has-error .map-status-dot{background:#cf705e}
+@keyframes roadmap-status-pulse{0%,100%{transform:scale(.9);opacity:.35;box-shadow:0 0 0 0 color-mix(in srgb,var(--blue) 0%,transparent)}50%{transform:scale(1.08);opacity:1;box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 12%,transparent)}}
+.roadmap-flow .react-flow__node.roadmap-node-enter{animation:roadmap-node-enter .26s ease-out both}
+@keyframes roadmap-node-enter{from{opacity:.1}to{opacity:1}}
+.node-future-skeleton{position:absolute;bottom:11px;left:18px;right:18px;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.node-future-skeleton i{
+ display:block;height:5px;width:74%;border-radius:4px;
+ background:linear-gradient(100deg,#e5ebf0 15%,#f5f8fa 47%,#e5ebf0 78%);
+ background-size:220% 100%;
+ animation:roadmap-shimmer 2.5s ease-in-out infinite;
+}
+.node-future-skeleton i:last-child{width:51%;animation-delay:.12s}
+@keyframes roadmap-shimmer{from{background-position:120% 0}to{background-position:-120% 0}}
+.map-skeleton{background:var(--map-background);overflow:hidden;padding:70px 25px 25px}
+.map-skeleton .skeleton-node{animation:none}
+.map-skeleton .skeleton-node i,.map-skeleton .skeleton-node b,.map-skeleton .skeleton-node span{
+ background:linear-gradient(100deg,#e5ebf0 15%,#f5f8fa 47%,#e5ebf0 78%);
+ background-size:220% 100%;animation:roadmap-shimmer 2.5s ease-in-out infinite;
+}
+.dark .diagram-content{--map-background:#191517;--map-grid-line:#605156;background:var(--map-background)}
+.dark .graph-wrapper{background:transparent}
+.dark .roadmap-flow{background:var(--map-background)}
+.dark .roadmap-flow .react-flow__background{opacity:.45}
+.dark .roadmap-flow .react-flow__edge-textbg{fill:var(--map-background)!important}
+.dark .map-status{background:rgba(29,40,54,.95);border-color:#35465a;color:#dae4ef}
+.dark .node-future-skeleton i,.dark .map-skeleton .skeleton-node i,.dark .map-skeleton .skeleton-node b,.dark .map-skeleton .skeleton-node span{
+ background:linear-gradient(100deg,#39495a,#4c5c6d,#39495a);
+ background-size:220% 100%;
+}
+.dark .map-skeleton{background:var(--map-background)}
+@media(min-width:861px){
+ .app-shell:not(.is-start) .conversation-panel{width:clamp(370px,32vw,480px);flex-basis:clamp(370px,32vw,480px)}
+}
+@media(max-width:860px){
+ .conversation-list{padding-left:14px;padding-right:14px}
+ .diagram-content{margin:0;border:0;border-radius:0}
+ .graph-wrapper{overflow:hidden}
+ .mobile-roadmap-list,.dark .mobile-roadmap-list{background:var(--map-background);padding-top:62px}
+ .map-status{top:11px;left:12px;right:12px;max-width:none;font-size:13px;min-height:34px}
+ .map-skeleton{padding:65px 14px 14px;overflow:auto}
+}
+@media(prefers-reduced-motion:reduce){
+ .map-status.is-processing .map-status-dot,.map-status.is-awaiting .map-status-dot,.roadmap-flow .react-flow__node.roadmap-node-enter,.node-future-skeleton i,.map-skeleton .skeleton-node i,.map-skeleton .skeleton-node b,.map-skeleton .skeleton-node span{animation:none!important}
+}
+
+/* Calm legal workspace: red actions, navy content, blue navigation, amber checks. */
+.app-shell.light{
+ --brand:#d71932;--brand-deep:#b31329;--brand-line:#f1cad1;--brand-wash:#fff1f3;
+ --action:#d71932;--action-hover:#b31329;--on-action:#fff;
+ --panel:#fff;--canvas:#f7f8fa;--soft:#f1f4f7;--border:#e2e7ee;
+ --text:#18263d;--secondary:#4e5e73;--muted:#68778b;
+ --blue:#365fd9;--blue-soft:#eff4ff;--blue-line:#c5d4f9;
+ --green:#237a57;--success-soft:#edf7f1;--amber:#a66b12;
+ --gold-soft:#fff8e9;--gold-ink:#88570f;--warm-line:#eddbb6;
+ --stone-soft:#f1f4f7;--stone-ink:#52627a;--surface-tint:#f8faff;
+ --accent-outline:#365fd9;--disabled-surface:#f1f3f6;--disabled-text:#768397;
+ --surface-shadow:0 2px 8px #18263d04;--surface-hover-shadow:0 6px 18px #18263d0a;
+}
+.app-shell.dark{
+ --brand:#ff8092;--brand-deep:#ffadb9;--brand-line:#603342;--brand-wash:#36232d;
+ --action:#d71932;--action-hover:#b31329;--on-action:#fff;
+ --panel:#182231;--canvas:#101925;--soft:#222f41;--border:#334359;
+ --text:#edf2fa;--secondary:#c4cfdf;--muted:#9dacc1;
+ --blue:#9ab6ff;--blue-soft:#233552;--blue-line:#425f91;
+ --green:#91d5b3;--success-soft:#203b32;--amber:#ebc17c;
+ --gold-soft:#362f21;--gold-ink:#ebc17c;--warm-line:#655238;
+ --stone-soft:#222f41;--stone-ink:#bdcadd;--surface-tint:#1c2b40;
+ --accent-outline:#9ab6ff;--disabled-surface:#253143;--disabled-text:#97a6b9;
+ --surface-shadow:0 2px 8px #00000010;--surface-hover-shadow:0 6px 18px #00000026;
+}
+.app-shell .diagram-content{--map-background:var(--canvas);--map-grid-line:#dbe2eb;--map-edge:#a8b4c5}
+.app-shell.dark .diagram-content{--map-grid-line:#36485f;--map-edge:#687c96}
+.app-shell .roadmap-flow .react-flow__background{opacity:.55}
+.app-shell .topbar{background:var(--panel);box-shadow:none;border-bottom-color:var(--border)}
+.app-shell .brand-icon{background:var(--action);box-shadow:none}
+.app-shell .brand>strong{color:var(--text)}
+.app-shell .header-outline{background:var(--brand-wash);color:var(--brand-deep);border:1px solid var(--brand-line);box-shadow:none}
+.app-shell .visual-header,.app-shell .chat-top,.app-shell .conversation-list{background:var(--panel)}
+.app-shell .visual-header{border-bottom:1px solid var(--border)}
+.app-shell .chat-top.has-messages h1{display:flex;align-items:center;gap:8px}
+.app-shell .chat-top.has-messages h1:before{content:'';width:3px;height:14px;border-radius:2px;background:var(--blue)}
+.app-shell .user-bubble{background:var(--soft);color:var(--text);box-shadow:none;border:1px solid var(--border)}
+.app-shell .assistant-icon{background:var(--blue-soft);color:var(--blue)}
+.app-shell .assistant-copy{color:var(--text);line-height:1.9}
+.app-shell .next-action{background:var(--gold-soft);box-shadow:none;border:1px solid var(--warm-line);padding:15px 16px}
+.app-shell .next-action .answer-label{color:var(--gold-ink)}
+.app-shell .time-note{background:var(--gold-soft);box-shadow:none;border:1px solid var(--warm-line)}
+.app-shell .answer-options,.app-shell .question-note{background:var(--soft)}
+.app-shell .answer-option>span{background:var(--panel);color:var(--blue)}
+.app-shell .followup-card{background:var(--panel);border-color:var(--border);box-shadow:var(--surface-shadow)}
+.app-shell .followup-heading{color:var(--text)}
+.app-shell .followup-heading svg{color:var(--blue)}
+.app-shell .composer{border-color:var(--border);background:var(--panel);box-shadow:var(--surface-shadow)}
+.app-shell .composer:focus-within{border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 9%,transparent)}
+.app-shell .composer-toolbar>.composer-send:not(:disabled){background:var(--action);color:var(--on-action)}
+.app-shell .conversation-tabs .conversation-tab{background:var(--soft);border-color:transparent}
+.app-shell .conversation-tabs .conversation-tab.active{background:var(--brand-wash);border-color:var(--brand-line);color:var(--brand-deep);box-shadow:none}
+.app-shell .conversation-tab.active>button[role=tab]{background:transparent;color:inherit;box-shadow:none}
+.app-shell .conversation-tabs>button[role=tab][aria-selected=true]{background:var(--brand-wash);border-color:var(--brand-line);color:var(--brand-deep);box-shadow:none}
+.app-shell .conversation-tab.active .tab-close:hover{background:color-mix(in srgb,var(--brand) 10%,transparent)}
+.app-shell .visual-tools button{border-color:var(--border);color:var(--secondary)}
+.app-shell .sources-trigger b{color:var(--blue)}
+.app-shell .roadmap-flow .react-flow__node-stage{width:317px;height:212px}
+.app-shell .roadmap-flow .stage-card,.app-shell .roadmap-flow .stage-card.scenario-card,.app-shell .roadmap-flow .stage-card.process-step,.app-shell .roadmap-flow .stage-card.process-outcome{
+ width:100%;height:100%;min-height:0;padding:18px 19px 46px;overflow:hidden;
+ background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--surface-shadow);
+ transition:border-color .18s,box-shadow .18s,background .18s;
+}
+.app-shell .stage-card-top{display:flex;align-items:center;gap:7px;margin-bottom:10px;min-height:24px}
+.app-shell .stage-title,.app-shell .scenario-card .stage-title,.app-shell .process-outcome .stage-title{
+ font-size:16px;font-weight:720;line-height:1.5;letter-spacing:-.35px;color:var(--text);margin-bottom:7px;
+ -webkit-line-clamp:2;word-break:keep-all;overflow-wrap:anywhere;
+}
+.app-shell .stage-description,.app-shell .scenario-card .stage-description,.app-shell .stage-card.process-step .stage-description,.app-shell .stage-card.process-outcome .stage-description{
+ font-size:14px;line-height:1.7;color:var(--secondary);min-height:0;-webkit-line-clamp:2;
+}
+.app-shell .stage-open{border-radius:12px}
+.app-shell .stage-pill{background:var(--soft);color:var(--stone-ink);font-size:12px;font-weight:650;line-height:22px;padding:1px 7px;box-shadow:none}
+.app-shell .stage-pill.current,.app-shell .stage-pill.possible{background:var(--blue-soft);color:var(--blue)}
+.app-shell .stage-pill.verify{background:var(--gold-soft);color:var(--gold-ink)}
+.app-shell .process-outcome .stage-pill{background:var(--gold-soft);color:var(--gold-ink)}
+.app-shell .stage-pill.done{background:var(--success-soft);color:var(--green)}
+.app-shell .stage-pill.unavailable{background:var(--soft);color:var(--muted)}
+.stage-state{display:inline-flex;align-items:center;gap:3px;margin-left:auto;font-size:11px;line-height:20px;white-space:nowrap}
+.stage-state.verify{color:var(--gold-ink)}
+.stage-state.done{color:var(--green)}
+.stage-card-footer{position:absolute;left:19px;right:19px;bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;border-top:1px solid var(--border);padding-top:10px;color:var(--muted);font-size:11px;line-height:1.5}
+.stage-card-footer>span:first-child{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stage-card-footer>span:last-child{display:flex;align-items:center;gap:2px;flex-shrink:0;color:var(--blue);white-space:nowrap;font-weight:600}
+.app-shell .stage-card.status-current{background:var(--surface-tint);border-color:var(--blue-line)}
+.app-shell .stage-card.selected{background:var(--blue-soft);border-color:var(--blue);box-shadow:0 0 0 2px color-mix(in srgb,var(--blue) 13%,transparent),var(--surface-shadow)}
+.app-shell .stage-card.status-done{background:var(--panel);opacity:1}
+.app-shell .roadmap-node-muted{opacity:1;transition:opacity .2s}
+.app-shell .roadmap-node-muted:hover,.app-shell .roadmap-node-muted:focus-within{opacity:1}
+.app-shell .path-muted{opacity:.45}
+.app-shell .roadmap-node-focused .stage-card:not(.selected){border-color:var(--blue-line)}
+.app-shell .roadmap-node-updated .stage-card{animation:roadmap-content-update 2.8s ease-out}
+.app-shell .roadmap-node-enter .stage-card{animation:roadmap-content-update 2.8s ease-out}
+@keyframes roadmap-content-update{0%,30%{box-shadow:var(--surface-hover-shadow)}100%{box-shadow:var(--surface-shadow)}}
+.app-shell .roadmap-flow .react-flow__edge-text{fill:var(--secondary)}
+.app-shell .roadmap-flow .react-flow__controls{box-shadow:var(--surface-shadow);margin:14px}
+.app-shell .roadmap-flow .react-flow__controls-button{width:36px;height:36px}
+.app-shell .roadmap-flow .readable-scale{width:40px;font-size:11px;font-weight:650}
+.map-reading-guide{position:absolute;bottom:19px;left:20px;z-index:4;display:flex;align-items:center;gap:7px;max-width:calc(100% - 200px);padding:6px 9px;border:1px solid var(--border);border-radius:7px;background:var(--panel);color:var(--secondary);font-size:11px;pointer-events:none}
+.map-path-key{width:17px;height:2px;background:var(--blue);flex-shrink:0}
+.map-pan-hint{margin-left:7px;padding-left:10px;border-left:1px solid var(--border);color:var(--muted)}
+.app-shell .map-status{background:var(--panel);color:var(--secondary);border-color:var(--border);box-shadow:var(--surface-shadow);font-size:12px;min-height:32px}
+.app-shell .map-status-dot{width:8px;height:8px;flex-basis:8px;background:var(--green)}
+.app-shell .map-status:is(.is-processing,.is-awaiting) .map-status-dot{background:var(--blue)}
+.app-shell .map-status.has-error .map-status-dot{background:var(--brand)}
+.app-shell .detail-panel{background:var(--panel)}
+.app-shell .detail-head{background:var(--panel);border-bottom:1px solid var(--border)}
+.app-shell .detail-eyebrow{color:var(--blue)}
+.app-shell .route-suitability{background:var(--blue-soft);box-shadow:none;border-left:2px solid var(--blue-line)}
+.app-shell .detail-section h4{color:var(--text)}
+.app-shell .timeline-number{background:var(--soft);color:var(--secondary);box-shadow:none}
+.app-shell .scenario-timeline li:not(:last-child):before{border-left-color:var(--border)}
+.app-shell .scenario-timeline .active .timeline-number{background:var(--blue);color:var(--panel)}
+.app-shell .step-actions{background:var(--panel);border-top-color:var(--border)}
+.app-shell :is(.step-primary,.followup-submit,.intake-next){background:var(--action);border-color:var(--action);color:var(--on-action);box-shadow:none}
+.app-shell :is(.step-primary,.followup-submit,.intake-next):disabled{background:var(--disabled-surface);border-color:var(--disabled-surface);color:var(--disabled-text);opacity:1;box-shadow:none}
+.app-shell .followup-choices button.selected,.app-shell .intake-options>button.is-selected{background:var(--blue-soft);border-color:var(--blue);color:var(--blue)}
+.app-shell .analysis-progress{background:var(--surface-tint);border-color:var(--border);box-shadow:none;padding:14px;border-radius:12px}
+.app-shell .progress-title{font-size:14px;align-items:flex-start;line-height:1.65}
+.app-shell .progress-title svg{margin-top:3px}
+.app-shell .progress-status>p{font-size:12px;line-height:1.65;margin-top:4px}
+.app-shell .analysis-progress .progress-steps{margin-top:12px;gap:5px}
+.app-shell .progress-steps li{flex-direction:row;gap:4px;padding:6px 2px;background:transparent;font-size:11px}
+.app-shell .progress-steps .progress-step-number{width:18px;height:18px;flex:0 0 18px;font-size:10px}
+.app-shell .progress-steps li.active{background:var(--blue-soft);border-color:var(--blue-line);color:var(--blue)}
+.app-shell .progress-steps li.active .progress-step-number{background:var(--blue);border-color:var(--blue);color:var(--panel)}
+.app-shell .progress-steps li.finished{color:var(--green)}
+.app-shell .progress-meta{margin-top:10px;padding-top:9px;font-size:11px}
+.app-shell .progress-meta button{min-height:32px;padding:5px 9px;font-size:12px}
+.app-shell :is(button,a,select,summary):focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+.app-shell .prompt-cards button{background:var(--soft);border-color:var(--border)}
+.app-shell .prompt-category,.app-shell .prompt-cards svg{color:var(--secondary)}
+.app-shell .mobile-navigation{background:var(--soft);box-shadow:inset 0 0 0 1px var(--border)}
+.app-shell .mobile-navigation>button[aria-pressed=true]{background:var(--panel);color:var(--blue);box-shadow:0 2px 6px #18263d08}
+.app-shell .mobile-navigation>button[aria-pressed=true]>span{background:var(--blue-soft);color:var(--blue)}
+@media(hover:hover){
+ .app-shell .stage-card:hover{border-color:var(--blue);box-shadow:var(--surface-hover-shadow)}
+ .app-shell .intake-options>button:hover{background:var(--surface-tint)}
+ .app-shell .prompt-cards button:hover{background:var(--blue-soft);border-color:var(--blue-line)}
+ .app-shell :is(.step-primary,.followup-submit,.intake-next,.composer-send):not(:disabled):hover{background:var(--action-hover);color:var(--on-action)}
+}
+@media(min-width:861px){.app-shell:not(.is-start) .conversation-panel{width:clamp(350px,28vw,440px);flex-basis:clamp(350px,28vw,440px)}}
+@media(max-width:1050px){.map-pan-hint{display:none}}
+@media(max-width:860px){.app-shell .progress-meta button{min-height:44px}.map-reading-guide{display:none}}
+@media(prefers-reduced-motion:reduce){.app-shell .roadmap-node-updated .stage-card,.app-shell .roadmap-node-enter .stage-card{animation:none!important}}
+
+/* One semantic two-color palette: ink navy for action and active paths,
+   muted plum for alternatives and decision badges. No decorative green/red. */
+.app-shell.light{
+ --brand:#2d426a;--brand-deep:#243657;--brand-line:#d4ddeb;--brand-wash:#f0f3f9;
+ --action:#2d426a;--action-hover:#233454;--on-action:#fff;
+ --accent:#925d7f;--accent-deep:#794565;--accent-soft:#faf1f6;--accent-line:#e8d5e0;
+ --panel:#fff;--canvas:#f7f8fb;--soft:#f1f3f7;--border:#e0e5ee;
+ --text:#222b40;--secondary:#536076;--muted:#727d8f;
+ --blue:#314b78;--blue-soft:#edf1f8;--blue-line:#c8d5e8;
+ --green:#687487;--success-soft:#f0f2f5;--amber:#794565;
+ --gold-soft:#faf1f6;--gold-ink:#794565;--warm-line:#e8d5e0;
+ --stone-soft:#f1f3f7;--stone-ink:#56647a;--surface-tint:#f6f8fc;
+ --accent-outline:#314b78;--disabled-surface:#edf0f4;--disabled-text:#8995a4;
+ --surface-shadow:0 2px 9px #222b4007;--surface-hover-shadow:0 7px 18px #222b4012;
+}
+.app-shell.dark{
+ --brand:#b6c9ee;--brand-deep:#d0dcf5;--brand-line:#445571;--brand-wash:#28344b;
+ --action:#6f8dc5;--action-hover:#839fd1;--on-action:#fff;
+ --accent:#d4a0bc;--accent-deep:#efbfd8;--accent-soft:#372a39;--accent-line:#614659;
+ --panel:#1c2534;--canvas:#131b29;--soft:#273244;--border:#3a4557;
+ --text:#f2f3f9;--secondary:#c7cedd;--muted:#a0aabc;
+ --blue:#b5c8ee;--blue-soft:#2a3a55;--blue-line:#4b6288;
+ --green:#a4afc2;--success-soft:#2a3442;--amber:#efbfd8;
+ --gold-soft:#372a39;--gold-ink:#efbfd8;--warm-line:#614659;
+ --stone-soft:#273244;--stone-ink:#c7cedd;--surface-tint:#222e43;
+ --accent-outline:#b5c8ee;--disabled-surface:#303949;--disabled-text:#9caabd;
+ --surface-shadow:0 2px 9px #00000018;--surface-hover-shadow:0 7px 18px #00000030;
+}
+.app-shell .diagram-content{--map-background:var(--canvas);--map-grid-line:#e1e8f1;--map-edge:#acbcd0}
+.app-shell.dark .diagram-content{--map-grid-line:#33465f;--map-edge:#75869e}
+.app-shell .brand-icon{background:#2e4c79}
+.app-shell.dark .brand-icon{background:#456b9b}
+.app-shell .header-outline{background:var(--blue-soft);color:var(--brand-deep);border-color:var(--blue-line)}
+.app-shell .conversation-tabs .conversation-tab.active,
+.app-shell .conversation-tabs>button[role=tab][aria-selected=true],
+.app-shell .visual-header .conversation-tabs button[aria-selected=true]{
+ background:var(--blue-soft);border-color:var(--blue-line);color:var(--brand-deep);box-shadow:none;
+}
+.app-shell .conversation-tabs .conversation-tab.active>button[role=tab]{
+ background:transparent;color:var(--brand-deep);box-shadow:none;
+}
+.app-shell .next-action{background:var(--soft);border-color:var(--border)}
+.app-shell .next-action .answer-label{color:var(--text)}
+.app-shell .stage-pill.current{background:var(--blue-soft);color:var(--brand-deep)}
+.app-shell .stage-pill.possible{background:var(--soft);color:var(--secondary)}
+.app-shell .stage-pill.verify,
+.app-shell .process-outcome .stage-pill,
+.app-shell .stage-pill.done,
+.app-shell .stage-pill.unavailable{background:var(--soft);color:var(--secondary)}
+.app-shell .stage-state.done{color:var(--blue)}
+.app-shell .stage-card.status-current{background:var(--surface-tint);border-color:var(--blue-line)}
+.app-shell .roadmap-node-muted{opacity:1}
+.app-shell .path-muted{opacity:.62}
+.app-shell .roadmap-node-focused .stage-card:not(.selected){border-color:var(--blue-line)}
+.app-shell .stage-card.selected{background:var(--blue-soft);border-color:var(--blue)}
+.app-shell .roadmap-flow .react-flow__edge-path{stroke-linecap:round;stroke-linejoin:round}
+.app-shell .map-reading-guide{background:var(--panel);border-color:var(--border);color:var(--secondary)}
+.app-shell .route-suitability{background:var(--soft);border-color:var(--blue-line);color:var(--secondary)}
+@media(hover:hover){
+ .app-shell .visual-header .conversation-tabs button[aria-selected=true]:hover{background:var(--blue-soft)}
+}
+
+
+/* Visual roles: navy = primary action/current path; plum = alternatives.
+   Keep connective tissue neutral and never use accent borders decoratively. */
+.app-shell .diagram-content{--map-background:var(--canvas);--map-grid-line:#e0e6ee;--map-edge:#aab7c9}
+.app-shell.dark .diagram-content{--map-grid-line:#364154;--map-edge:#77879e}
+.app-shell .brand-icon,.app-shell.dark .brand-icon{background:var(--action)}
+.app-shell .header-outline{background:var(--brand-wash);color:var(--brand-deep);border-color:var(--brand-line)}
+.app-shell .conversation-tabs .conversation-tab.active,
+.app-shell .conversation-tabs>button[role=tab][aria-selected=true],
+.app-shell .visual-header .conversation-tabs button[aria-selected=true]{
+ background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent-deep)
+}
+.app-shell .conversation-tabs .conversation-tab.active>button[role=tab]{color:var(--accent-deep)}
+.app-shell .stage-pill.possible,
+.app-shell .stage-pill.verify,
+.app-shell .process-outcome .stage-pill{
+ background:var(--accent-soft);color:var(--accent-deep)
+}
+.app-shell .stage-state.verify{color:var(--accent-deep)}
+.app-shell .stage-pill.current{background:var(--blue-soft);color:var(--blue)}
+.app-shell .stage-pill.done,.app-shell .stage-state.done{color:var(--secondary);background:var(--soft)}
+.app-shell .map-status-dot{background:var(--blue)}
+.app-shell .map-status.is-processing .map-status-dot,
+.app-shell .map-status.is-awaiting .map-status-dot{background:var(--accent)}
+.app-shell .map-status.has-error .map-status-dot{background:#bd615f}
+.app-shell .step-primary,.app-shell .composer-toolbar>.composer-send:not(:disabled){background:var(--action);color:var(--on-action)}
+.app-shell .stage-card.status-current{border-color:var(--blue-line);background:var(--surface-tint)}
+.app-shell .stage-card.selected{border-color:var(--blue);background:var(--blue-soft)}
+.app-shell .stage-card-footer>span:last-child{color:var(--blue)}
+.app-shell .map-path-key{background:var(--blue)}
+.app-shell .react-flow__edge-path{vector-effect:non-scaling-stroke}
+.app-shell .roadmap-flow .react-flow__nodes{isolation:isolate}
+.app-shell .map-reading-guide{box-shadow:0 2px 8px #1d2a430a}
+@media(hover:hover){
+ .app-shell .stage-card.status-possible:hover{border-color:var(--accent)}
+}
+
+
+/* 2026-10-27: neutral LAW PROJECT workspace.
+   Black is the base; Arsenal red is for primary actions/active focus,
+   restrained gold is reserved for verification and warnings. */
+.app-shell.light{
+ --bg:#f5f5f6;--surface:#fff;--surface-2:#f0f1f3;--surface-3:#e8e9ed;
+ --brand:#191a1d;--brand-deep:#191a1d;--brand-line:#e3e4e7;--brand-wash:#f5f5f6;
+ --action:#c8102e;--action-hover:#a70d27;--on-action:#fff;
+ --accent:#c8102e;--accent-deep:#ab0d29;--accent-soft:#fff0f2;--accent-line:#edd6dc;
+ --accent-yellow:#a87710;--accent-yellow-soft:#fff4d8;
+ --panel:#fff;--canvas:#f6f6f8;--soft:#f1f2f4;--border:#e3e4e8;
+ --text:#17181b;--secondary:#42454c;--muted:#6b7079;
+ --blue:#33363d;--blue-soft:#f1f2f4;--blue-line:#dedfe5;
+ --green:#535760;--success-soft:#f1f2f4;--amber:#976810;
+ --gold-soft:#fff5dc;--gold-ink:#90610c;--warm-line:#f3e4bd;
+ --stone-soft:#f1f2f4;--stone-ink:#525660;--surface-tint:#fafafb;
+ --accent-outline:#c8102e;--disabled-surface:#ededef;--disabled-text:#858891;
+ --surface-shadow:0 5px 20px #1516190c;--surface-hover-shadow:0 8px 24px #15161916;
+}
+.app-shell.dark{
+ --bg:#0b0b0c;--surface:#121315;--surface-2:#181a1d;--surface-3:#202328;
+ --brand:#f0f0f2;--brand-deep:#f4f4f5;--brand-line:#333035;--brand-wash:#231a1d;
+ --action:#c8102e;--action-hover:#a70d27;--on-action:#fff;
+ --accent:#c8102e;--accent-deep:#f16b80;--accent-soft:#2d1a20;--accent-line:#512830;
+ --accent-yellow:#f2c94c;--accent-yellow-soft:#302a1c;
+ --panel:#121315;--canvas:#0b0c0e;--soft:#1d1e21;--border:#2a2c31;
+ --text:#f4f4f5;--secondary:#c7c9cf;--muted:#9599a2;
+ --blue:#d1d3da;--blue-soft:#24262b;--blue-line:#34363d;
+ --green:#b8bbc4;--success-soft:#23252a;--amber:#f2c94c;
+ --gold-soft:#302a1c;--gold-ink:#f2c94c;--warm-line:#433a24;
+ --stone-soft:#202226;--stone-ink:#c1c4cb;--surface-tint:#191a1e;
+ --accent-outline:#f2c94c;--disabled-surface:#28292d;--disabled-text:#7a7d86;
+ --surface-shadow:0 8px 30px #00000028;--surface-hover-shadow:0 11px 28px #00000048;
+ color-scheme:dark;
+}
+.app-shell{background:var(--panel);color:var(--text)}
+.app-shell .diagram-content{--map-background:var(--canvas);--map-grid-line:#e8e8ec;--map-edge:#9298a2}
+.app-shell.dark .diagram-content{--map-grid-line:#1c1e22;--map-edge:#6d737c}
+.app-shell .roadmap-flow .react-flow__background{opacity:.33}
+.app-shell .brand-icon,.app-shell.dark .brand-icon{background:var(--action)}
+.app-shell .header-outline{background:var(--soft);border:0;color:var(--text)}
+.app-shell .topbar,.app-shell .visual-header{background:var(--panel);box-shadow:none}
+.app-shell .visual-header{border-bottom:1px solid var(--border)}
+.app-shell .conversation-panel{background:var(--panel);border-right:1px solid var(--border)}
+.app-shell .chat-top.has-messages h1:before{background:var(--accent)}
+.app-shell .user-bubble{background:var(--soft);border:0}
+.app-shell .next-action,.app-shell .time-note,.app-shell .question-note,
+.app-shell .followup-card,.app-shell .analysis-progress,.app-shell .map-overview{
+ border:0;box-shadow:none;background:var(--soft);
+}
+.app-shell .prompt-cards button{border:0;background:var(--soft)}
+.app-shell .prompt-cards button:hover{background:var(--surface-3);border:0}
+.app-shell .composer{border:1px solid var(--border);box-shadow:none;background:var(--panel)}
+.app-shell .composer:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 16%,transparent)}
+.app-shell .composer-toolbar>.composer-send:not(:disabled),
+.app-shell :is(.step-primary,.followup-submit,.intake-next){background:var(--action);color:var(--on-action)}
+.app-shell :is(button,a,select,summary):focus-visible{outline:2px solid var(--accent-yellow);outline-offset:2px}
+.app-shell .route-suitability{border:0;background:var(--soft)}
+.app-shell .map-reading-guide,.app-shell .map-status{background:var(--panel);border:0;box-shadow:none}
+.app-shell .map-status-dot{background:var(--muted)}
+.app-shell .map-status:is(.is-processing,.is-awaiting) .map-status-dot{background:var(--accent-yellow)}
+.app-shell .map-path-key{background:var(--accent)}
+.app-shell .stage-pill.current,.app-shell .stage-pill.possible{background:var(--soft);color:var(--text)}
+.app-shell .stage-pill.verify,.app-shell .process-outcome .stage-pill{background:var(--gold-soft);color:var(--gold-ink)}
+.app-shell .stage-pill.done{background:var(--soft);color:var(--secondary)}
+.app-shell .stage-state.verify{color:var(--gold-ink)}
+.app-shell .stage-state.done{color:var(--secondary);background:transparent}
+.app-shell .roadmap-flow .stage-card,
+.app-shell .roadmap-flow .stage-card.scenario-card,
+.app-shell .roadmap-flow .stage-card.process-step,
+.app-shell .roadmap-flow .stage-card.process-outcome{
+ border:1px solid transparent;background:var(--panel);
+ box-shadow:var(--surface-shadow);border-radius:12px;
+}
+.app-shell .stage-card.status-current{background:var(--surface-tint);border-color:var(--border)}
+.app-shell .stage-card.selected{background:var(--surface-2);border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.app-shell .roadmap-node-focused .stage-card:not(.selected){border-color:var(--border)}
+.app-shell .stage-card-footer{border-top:0;padding-top:0;color:var(--muted)}
+.app-shell .stage-card-footer>span:last-child{color:var(--text)}
+.app-shell .roadmap-flow .react-flow__controls{border:1px solid var(--border);box-shadow:none}
+.app-shell .roadmap-flow .react-flow__controls-button{border-color:var(--border)}
+.app-shell .roadmap-flow .react-flow__edge-path{stroke-linecap:round;stroke-linejoin:round}
+.app-shell .roadmap-flow .react-flow__node-stage{isolation:isolate}
+.app-shell .map-pan-hint{border-left-color:var(--border)}
+.app-shell .progress-steps li.active{background:var(--soft);border-color:var(--border);color:var(--text)}
+.app-shell .progress-steps li.active .progress-step-number{background:var(--text);color:var(--panel);border-color:var(--text)}
+.app-shell .progress-steps li.finished{color:var(--secondary)}
+.app-shell .mobile-navigation{box-shadow:none}
+.app-shell .mobile-navigation>button[aria-pressed=true]{background:var(--panel);box-shadow:none;color:var(--text)}
+@media(hover:hover){
+ .app-shell .stage-card:hover,.app-shell .stage-card.status-possible:hover{border-color:var(--border);box-shadow:var(--surface-hover-shadow)}
+ .app-shell .stage-card.selected:hover{border-color:var(--accent)}
+ .app-shell .visual-header .conversation-tabs button[aria-selected=true]:hover{background:var(--bg)}
+}
+/* Tabs remain flush with the header. Only a black active surface and
+   a concise red bottom rule indicate the current conversation. */
+.app-shell .visual-header .conversation-tabs{gap:3px;border:0;box-shadow:none}
+.app-shell .conversation-tabs .conversation-tab,
+.app-shell .conversation-tabs .conversation-tab.active{
+ position:relative;border:0;border-radius:0;background:transparent;
+ box-shadow:none;color:var(--muted);
+}
+.app-shell .conversation-tabs .conversation-tab.active,
+.app-shell .conversation-tabs>button[role=tab][aria-selected=true],
+.app-shell .visual-header .conversation-tabs button[aria-selected=true]{
+ position:relative;border:0;border-radius:0;background:var(--bg);
+ box-shadow:none;color:var(--text);
+}
+.app-shell .conversation-tab.active>button[role=tab],
+.app-shell .conversation-tabs .conversation-tab.active>button[role=tab]{
+ border:0;background:transparent;color:var(--text);box-shadow:none;
+}
+.app-shell .conversation-tabs .conversation-tab.active::after,
+.app-shell .visual-header .conversation-tabs>button[role=tab][aria-selected=true]::after{
+ content:"";position:absolute;bottom:0;left:10px;right:10px;
+ height:3px;border-radius:2px 2px 0 0;background:var(--accent);pointer-events:none;
+}
+.app-shell .conversation-tabs .conversation-tab .tab-close{border:0}
+.app-shell .conversation-tabs .conversation-tab:not(.active):hover{background:var(--soft)}
+.app-shell .conversation-tabs .conversation-tab.active:hover{background:var(--bg)}
+.app-shell .conversation-tabs .conversation-tab.drag-over{box-shadow:inset 3px 0 0 var(--accent)}
+@media(max-width:860px){
+ .app-shell .conversation-panel{border-right:0}
+ .app-shell .mobile-navigation{background:var(--soft)}
+ .app-shell .mobile-roadmap-card{background:var(--panel);border-color:var(--border)}
+}
+
+
+/* 2026-10-27: align both desktop header baselines and add restrained light accents. */
+.app-shell.light{
+ --bg:#f8f9fb;
+ --canvas:#f7f8fb;
+ --panel:#ffffff;
+ --soft:#f2f4f7;
+ --surface-2:#eff2f7;
+ --surface-3:#e8edf4;
+ --border:#e6e8ed;
+ --text:#1a1b20;
+ --secondary:#4d535e;
+ --muted:#707988;
+ --info:#536e9d;
+ --info-soft:#edf2fa;
+ --info-line:#d8e3f2;
+ --gold-soft:#fff5de;
+ --gold-ink:#98670d;
+ --warm-line:#f1dfb6;
+ --map-edge:#a4acb9;
+ --surface-tint:#f8faff;
+ --surface-shadow:0 5px 19px #26334b0a;
+ --surface-hover-shadow:0 8px 23px #26334b14;
+}
+.app-shell.light .diagram-content{--map-background:var(--canvas);--map-grid-line:#dfe5ef;--map-edge:#a4acb9}
+/* Map cards stay neutral; current progress must never create a blue card. */
+.app-shell.light .stage-card.status-current{background:var(--panel);border-color:var(--border)}
+.app-shell.light .stage-pill.current{background:var(--info-soft);color:var(--info)}
+.app-shell.light .stage-pill.possible{background:#f2f3f6;color:#4b5260}
+.app-shell.light .stage-pill.verify,
+.app-shell.light .process-outcome .stage-pill{background:var(--gold-soft);color:var(--gold-ink)}
+.app-shell.light .stage-state.verify{color:var(--gold-ink)}
+.app-shell.light .stage-card.selected{background:#fff;border-color:var(--accent);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 15%,transparent),0 8px 22px #2029380d}
+.app-shell.light .next-action,
+.app-shell.light .route-suitability{background:var(--info-soft);color:var(--text)}
+.app-shell.light .next-action .answer-label{color:var(--info)}
+.app-shell.light .analysis-progress{background:var(--info-soft)}
+.app-shell.light .map-status-dot{background:var(--info)}
+.app-shell.light .map-status:is(.is-processing,.is-awaiting) .map-status-dot{background:var(--accent-yellow)}
+.app-shell.light .stage-card-footer>span:last-child{color:var(--info)}
+.app-shell.light .visual-tools button:hover{background:var(--info-soft)}
+.app-shell.light .conversation-tabs .conversation-tab.active,
+.app-shell.light .conversation-tabs>button[role=tab][aria-selected=true],
+.app-shell.light .visual-header .conversation-tabs button[aria-selected=true]{background:#f5f6f8;color:var(--text)}
+.app-shell .conversation-panel{overflow:hidden;border-radius:12px 0 0 12px}
+.app-shell .composer{border-radius:16px;overflow:hidden}
+.app-shell .composer textarea{border-radius:16px}
+.app-shell .user-bubble{border-radius:16px 16px 6px 16px}
+.app-shell .next-action,.app-shell .followup-card,.app-shell .question-note{border-radius:12px}
+@media(min-width:861px){
+ .app-shell:not(.is-start) .chat-top.has-messages{
+  box-sizing:border-box;height:58px;min-height:58px;max-height:58px;
+  flex:0 0 58px;padding:0 24px;display:flex;align-items:center;
+  border-bottom:1px solid var(--border);
+ }
+ .app-shell:not(.is-start) .chat-top.has-messages h1{margin:0;line-height:1.4}
+ .app-shell:not(.is-start) .visual-header{
+  box-sizing:border-box;height:58px;min-height:58px;max-height:58px;
+  flex:0 0 58px;padding:0 16px;border-bottom:1px solid var(--border);
+ }
+ .app-shell:not(.is-start) .visual-header .conversation-tabs{
+  align-self:stretch;align-items:stretch;height:auto;min-height:0;
+ }
+ .app-shell:not(.is-start) .conversation-tabs .conversation-tab,
+ .app-shell:not(.is-start) .visual-header .conversation-tabs>button[role=tab]{
+  height:100%;align-self:stretch;display:flex;align-items:center;
+ }
+ .app-shell:not(.is-start) .conversation-tabs .conversation-tab>button[role=tab]{
+  min-height:0;height:100%;
+ }
+ .app-shell:not(.is-start) .visual-header .conversation-tabs .conversation-tab.active::after,
+ .app-shell:not(.is-start) .visual-header .conversation-tabs>button[role=tab][aria-selected=true]::after{
+  bottom:0;height:3px;
+ }
+}
+@media(max-width:860px){
+ .app-shell .conversation-panel{border-radius:0}
+ .app-shell .visual-header{min-height:54px}
+}
+
+/* Active conversation: gently rounded upper corners, underline stays flush. */
+.app-shell .conversation-tabs .conversation-tab.active,
+.app-shell .conversation-tabs>button[role=tab][aria-selected=true],
+.app-shell .visual-header .conversation-tabs button[aria-selected=true]{
+ border-radius:9px 9px 0 0;
+}
+.app-shell .conversation-tabs .conversation-tab:not(.active){
+ border-radius:9px 9px 0 0;
+}
+@media(min-width:861px){
+ .app-shell:not(.is-start) .visual-header .conversation-tabs button[aria-selected=true]{
+  border-radius:9px 9px 0 0;
+ }
+}
+
+
+/* 2026-10-27: restrained icon accents and independent chat/map color roles.
+   Keep the blue #EDF2FA information panel, give chat guidance warm contrast. */
+.app-shell.light{
+ --chat-accent:#87501e;
+ --chat-accent-strong:#653d17;
+ --chat-accent-soft:#fff3e5;
+ --chat-accent-line:#f0dac0;
+ --chat-ink:#564029;
+ --chat-neutral:#f2f4f7;
+ --map-status-ink:#234f7c;
+ --map-status-bg:#eaf2ff;
+ --map-status-border:#d2e1f3;
+}
+.app-shell.dark{
+ --chat-accent:#efb976;
+ --chat-accent-strong:#f2c891;
+ --chat-accent-soft:#30261f;
+ --chat-accent-line:#5a422f;
+ --chat-ink:#e6d0b0;
+ --chat-neutral:#222429;
+ --map-status-ink:#bad8ff;
+ --map-status-bg:#202b3b;
+ --map-status-border:#334b66;
+}
+/* Only chat guidance receives warm tones. Informational detail boxes stay blue. */
+.app-shell .conversation-panel .next-action{
+ background:var(--chat-accent-soft);
+ border:1px solid var(--chat-accent-line);
+ border-radius:14px;
+ padding:15px 16px;
+ box-shadow:none;
+}
+.app-shell .conversation-panel .next-action .answer-label{
+ display:flex;align-items:center;gap:9px;
+ margin-bottom:8px;color:var(--chat-accent-strong);
+ font-size:14px;font-weight:750;
+}
+.app-shell .conversation-panel .next-action p{
+ color:var(--chat-ink);
+ font-size:14px;line-height:1.8;
+}
+.app-shell .conversation-panel .question-note{
+ background:var(--chat-neutral);
+ border:1px solid var(--border);
+ border-radius:12px;
+ color:var(--secondary);
+}
+.app-shell .conversation-panel .question-note svg{color:var(--chat-accent)}
+.app-shell .conversation-panel .user-bubble{
+ background:var(--chat-neutral);
+ border:0;
+ color:var(--text);
+}
+.app-shell .conversation-panel .assistant-icon{
+ width:30px;height:30px;flex-basis:30px;
+ border-radius:10px;
+ background:var(--chat-neutral);
+ color:var(--secondary);
+}
+.app-shell .detail-panel .route-suitability{
+ background:#edf2fa;
+ border:0;
+ border-radius:10px;
+ color:#2c4161;
+}
+.app-shell.dark .detail-panel .route-suitability{
+ background:var(--blue-soft);
+ color:var(--text);
+}
+.app-shell .legal-inline-icon{
+ display:inline-flex;align-items:center;justify-content:center;
+ flex:0 0 28px;width:28px;height:28px;
+ border-radius:9px;vertical-align:middle;
+ box-shadow:inset 0 -2px 0 #0000000b;
+}
+.app-shell .legal-inline-icon--action{
+ background:#e7b980;color:#754312;
+}
+.app-shell.dark .legal-inline-icon--action{
+ background:#775033;color:#ffdcaa;
+}
+.app-shell .legal-inline-icon--route{
+ background:#dceaff;color:#2564ae;
+}
+.app-shell.dark .legal-inline-icon--route{
+ background:#274365;color:#b8d7ff;
+}
+.app-shell .detail-section .legal-icon-heading{
+ display:flex;align-items:center;gap:9px;
+}
+.app-shell .detail-section .legal-icon-heading .legal-inline-icon{margin:0}
+.app-shell .map-status{
+ gap:10px;min-height:40px;
+ padding:9px 14px 9px 12px;
+ border-radius:12px;
+ border:1px solid var(--map-status-border);
+ background:var(--map-status-bg);
+ color:var(--map-status-ink);
+ font-size:13px;font-weight:650;
+ line-height:1.55;
+ box-shadow:0 4px 12px #29486d0a;
+}
+.app-shell .map-status>span:last-child{
+ color:var(--map-status-ink);
+ font-size:13px;font-weight:670;
+ letter-spacing:-.15px;
+}
+.app-shell .map-status .map-status-dot{
+ display:inline-flex;align-items:center;justify-content:center;
+ width:37px;height:20px;flex:0 0 37px;
+ gap:4px;margin:0;
+ border-radius:0;
+ background:transparent!important;
+ animation:none!important;
+ box-shadow:none!important;
+}
+.app-shell .map-status .map-status-dot i{
+ display:block;width:8px;height:8px;flex:0 0 8px;
+ border-radius:50%;background:var(--map-status-ink);
+ transform-origin:center;
+ animation:legal-status-dot-pulse 1.45s ease-in-out infinite;
+}
+.app-shell .map-status .map-status-dot i:nth-child(2){animation-delay:.18s}
+.app-shell .map-status .map-status-dot i:nth-child(3){animation-delay:.36s}
+@keyframes legal-status-dot-pulse{
+ 0%,100%{transform:scale(.74);opacity:.50}
+ 45%{transform:scale(1.26);opacity:1}
+ 70%{transform:scale(.91);opacity:.78}
+}
+.app-shell .map-status.has-error{
+ background:var(--accent-soft);
+ border-color:var(--accent-line);
+ color:var(--accent-deep);
+}
+.app-shell .map-status.has-error>span:last-child{color:var(--accent-deep)}
+.app-shell .map-status.has-error .map-status-dot i{
+ background:var(--accent);
+ animation:none;
+ transform:scale(.95);opacity:1;
+}
+@media(max-width:860px){
+ .app-shell .map-status{left:12px;right:12px;max-width:none;padding:8px 11px;font-size:12px}
+ .app-shell .map-status>span:last-child{font-size:12px}
+ .app-shell .legal-inline-icon{width:27px;height:27px;flex-basis:27px}
+}
+@media(prefers-reduced-motion:reduce){
+ .app-shell .map-status .map-status-dot i{
+  animation:none!important;transform:scale(1)!important;opacity:1!important;
+ }
+}
+
+/* 2026-10-27: wider, slightly shorter roadmap cards with clear one-line headings. */
+.app-shell .roadmap-flow .stage-card,
+.app-shell .roadmap-flow .stage-card.scenario-card,
+.app-shell .roadmap-flow .stage-card.process-step,
+.app-shell .roadmap-flow .stage-card.process-outcome{
+ padding:16px 17px 41px;
+}
+.app-shell .roadmap-flow .stage-card .stage-card-top{
+ min-height:23px;margin-bottom:9px;
+}
+.app-shell .roadmap-flow .stage-card .stage-title{
+ display:block;max-width:100%;margin-bottom:8px;
+ white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+ -webkit-line-clamp:unset;-webkit-box-orient:initial;
+ font-size:15px;line-height:1.45;letter-spacing:-.35px;
+}
+.app-shell .roadmap-flow .stage-card .stage-description{
+ display:-webkit-box;min-height:0;
+ -webkit-box-orient:vertical;-webkit-line-clamp:3;
+ overflow:hidden;overflow-wrap:anywhere;word-break:keep-all;
+ white-space:pre-line;font-size:13.5px;line-height:1.65;
+}
+.app-shell .roadmap-flow .stage-card.situation-card .stage-description{-webkit-line-clamp:3}
+/* Keep the copy limits even when shared readability styles are loaded later. */
+.app-shell .roadmap-flow .react-flow__node-stage .stage-card .stage-description{
+ display:-webkit-box;white-space:pre-line;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;
+}
+.app-shell .roadmap-flow .react-flow__node-stage .stage-card.situation-card .stage-description{-webkit-line-clamp:3}
+.app-shell .mobile-journey .journey-option>p,
+.app-shell .mobile-journey .journey-route-head>p{
+ display:-webkit-box;white-space:pre-line;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;
+}
+.app-shell .mobile-journey .journey-origin-description{
+ display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;
+}
+.map-alignment-switch{
+ position:absolute;top:14px;left:14px;z-index:5;display:flex;gap:3px;
+ padding:4px;border:1px solid var(--border);border-radius:8px;
+ background:var(--panel);box-shadow:var(--surface-shadow);
+}
+.map-alignment-switch>button{
+ min-height:32px;padding:6px 10px;border:0;border-radius:5px;
+ background:transparent;color:var(--secondary);font-size:12px;cursor:pointer;
+}
+.map-alignment-switch>button[aria-pressed=true]{background:var(--soft);color:var(--text);font-weight:650}
+.map-alignment-switch>button:hover{background:var(--soft)}
+.app-shell .roadmap-flow .stage-card .stage-card-footer{
+ left:17px;right:17px;bottom:13px;
+}
+.app-shell.light .roadmap-flow .stage-card .stage-pill.stage-keyword{
+ background:#ebf2ff;color:#2f62a3;border:1px solid #dce8fa;
+ border-radius:6px;padding:1px 9px;line-height:21px;
+ font-size:11px;font-weight:700;
+}
+.app-shell.dark .roadmap-flow .stage-card .stage-pill.stage-keyword{
+ background:#223550;color:#b5d3ff;border:1px solid #364c69;
+ border-radius:6px;padding:1px 9px;line-height:21px;
+ font-size:11px;font-weight:700;
+}
+
+/* 2026-10-27: burgundy route labels and restrained, color-matched card depth. */
+.app-shell.light .roadmap-flow .stage-card .stage-pill.stage-keyword{
+  background:#f7ebef;color:#874057;border:1px solid #ecd5dd;
+}
+.app-shell.dark .roadmap-flow .stage-card .stage-pill.stage-keyword{
+  background:#3a252f;color:#f0bccb;border:1px solid #66414f;
+}
+.app-shell.light .roadmap-flow .react-flow__node-stage .stage-card:not(.selected){
+  box-shadow:0 4px 16px rgba(116,60,81,.055),0 1px 4px rgba(40,36,48,.025);
+}
+.app-shell.light .roadmap-flow .react-flow__node-stage .stage-card.situation-card:not(.selected){
+  box-shadow:0 4px 14px rgba(34,39,50,.055);
+}
+.app-shell.dark .roadmap-flow .react-flow__node-stage .stage-card:not(.selected){
+  box-shadow:0 4px 17px rgba(0,0,0,.22),0 0 16px rgba(177,98,125,.035);
+}
+.app-shell.light .roadmap-flow .react-flow__node-stage .stage-card:not(.selected):hover{
+  box-shadow:0 6px 19px rgba(116,60,81,.075),0 1px 5px rgba(40,36,48,.03);
+}
+
+/* Recorded progress stays legible, with room above the text and a small breathing dot. */
+.app-shell .completed-path{
+  position:relative;z-index:9;display:flex;align-items:center;flex-wrap:nowrap;
+  min-height:44px;gap:10px;padding:5px 18px;box-sizing:border-box;
+  flex-shrink:0;border-bottom:1px solid var(--border);
+  background:var(--panel);overflow:visible;
+}
+.app-shell .completed-path-dot{
+  display:block;flex:0 0 8px;width:8px;height:8px;border-radius:50%;
+  background:#a25065;box-shadow:0 0 0 3px rgba(162,80,101,.07);
+  transform-origin:center;animation:completed-path-breathe 2.1s ease-in-out infinite;
+}
+.app-shell .completed-path-copy{
+  display:flex;flex:1;min-width:0;flex-direction:row;align-items:center;
+  gap:0;padding:0;line-height:1.4;white-space:nowrap;
+}
+.app-shell .completed-path-copy>strong{
+  display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:12.5px;line-height:1.4;font-weight:650;
+  letter-spacing:-.15px;color:var(--text);
+}
+.app-shell .completed-path-copy>span{
+  display:block;font-size:12px;line-height:1.55;color:var(--secondary);
+  overflow-wrap:break-word;
+}
+.app-shell .completed-path-history{position:relative;flex:0 0 auto;margin-left:auto;z-index:2;}
+.app-shell .completed-path-history>summary{
+  display:inline-flex;align-items:center;justify-content:center;gap:4px;
+  min-height:32px;padding:6px 9px;border:1px solid var(--border);
+  border-radius:7px;background:var(--panel);color:var(--secondary);
+  font-size:11px;font-weight:650;line-height:1.45;
+  white-space:nowrap;cursor:pointer;list-style:none;
+}
+.app-shell .completed-path-history>summary::-webkit-details-marker{display:none}
+.app-shell .completed-path-history[open]>summary svg{transform:rotate(180deg)}
+.app-shell .completed-path-items{
+  position:absolute;right:0;top:calc(100% + 6px);width:min(340px,calc(100vw - 45px));
+  max-height:280px;overflow-y:auto;padding:6px;
+  border:1px solid var(--border);border-radius:10px;
+  background:var(--panel);box-shadow:0 8px 24px rgba(25,28,36,.1);
+}
+.app-shell .completed-path-items>button{
+  display:flex;align-items:center;justify-content:space-between;gap:9px;
+  width:100%;min-height:37px;padding:8px 10px;border:0;
+  border-radius:7px;background:transparent;text-align:left;
+  color:var(--secondary);font-size:12px;line-height:1.55;
+  white-space:normal;overflow-wrap:anywhere;cursor:pointer;
+}
+.app-shell .completed-path-items>button:hover{background:var(--soft);color:var(--text)}
+.app-shell .completed-path-items>button svg{flex:0 0 auto}
+.app-shell.dark .completed-path-dot{
+  background:#dd9cad;box-shadow:0 0 0 3px rgba(221,156,173,.09);
+}
+@keyframes completed-path-breathe{
+  0%,100%{transform:scale(.83);opacity:.65}
+  50%{transform:scale(1.22);opacity:1}
+}
+@media(max-width:860px){
+  .app-shell .completed-path{min-height:44px;gap:9px;padding:5px 12px;flex-wrap:nowrap}
+  .app-shell .completed-path-copy>strong{font-size:12px}
+  .app-shell .completed-path-history>summary{padding:6px 7px;font-size:10px}
+}
+@media(max-width:380px){
+  .app-shell .completed-path{flex-wrap:wrap;row-gap:4px}
+  .app-shell .completed-path-history{margin-left:21px}
+}
+@media(prefers-reduced-motion:reduce){
+  .app-shell .completed-path-dot{animation:none;transform:scale(1);opacity:1}
+}
+
+/* Do not inherit the old "완료" badge surface onto the new status text or dot. */
+.app-shell .completed-path>span.completed-path-copy{
+  padding:0;border:0;border-radius:0;background:transparent;
+}
+.app-shell .completed-path>span.completed-path-dot{
+  box-sizing:border-box;padding:0;border-radius:50%;
+}
+
+/* The compact mobile roadmap uses the same restrained burgundy family. */
+@media(max-width:860px){
+  .app-shell.light .mobile-journey{
+    --route-1:#873e54;--route-2:#925067;--route-3:#855367;--route-4:#745567;
+  }
+  .app-shell.dark .mobile-journey{
+    --route-1:#e9b0c0;--route-2:#dea5b7;--route-3:#d5a6b7;--route-4:#caa4b5;
+  }
+  .app-shell.light .journey-option{
+    box-shadow:0 4px 15px rgba(116,60,81,.05);
+  }
+  .app-shell.dark .journey-option{
+    box-shadow:0 4px 16px rgba(0,0,0,.2),0 0 12px rgba(177,98,125,.03);
+  }
+}
+
+/* Map-only 2026-10-27 refinement: sourced durations and compact procedure clusters. */
+.app-shell .stage-card-footer .stage-period{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:650;letter-spacing:-.01em;color:var(--secondary)}
+.app-shell .stage-card-footer .stage-period svg{flex:0 0 auto}
+.app-shell .stage-card-footer .stage-period.deadline{color:var(--accent-deep)}
+.app-shell .stage-card-footer .stage-period.estimate{color:var(--text)}
+.app-shell .stage-card-footer .stage-period.variable{font-weight:600;color:var(--secondary)}
+.procedure-group-bracket{
+ position:absolute;height:35px;box-sizing:border-box;
+ pointer-events:none;overflow:visible;z-index:1;
+}
+.procedure-group-bracket-line{
+ display:block;overflow:visible;
+ fill:none;stroke:color-mix(in srgb,var(--map-edge) 73%,transparent);
+ stroke-width:1.8;stroke-dasharray:1 6;stroke-linecap:round;stroke-linejoin:round;
+}
+.procedure-group-bracket>span{
+ position:absolute;top:12px;transform:translate(-50%,-50%);
+ display:flex;align-items:center;justify-content:center;min-height:30px;
+ padding:4px 14px;white-space:nowrap;box-sizing:border-box;
+ border:1px solid var(--border);border-radius:999px;
+ background:var(--panel);box-shadow:0 2px 7px #1516190a;
+ font-size:14px;line-height:20px;font-weight:700;color:var(--text);
+}
+.app-shell.dark .procedure-group-bracket>span{box-shadow:0 2px 7px #0004}
+
+.app-shell .detail-metrics .period-source-link{display:inline-flex;align-items:center;gap:4px;margin-top:7px;font-size:11px;font-weight:650;color:var(--text);text-decoration:underline;text-underline-offset:2px}
+.app-shell .detail-metrics small{display:block;max-width:290px;font-size:11px;line-height:1.55;color:var(--muted)}
+
+/* Every map depth uses the same legible description color, regardless of
+   completion and selected-path states. Path emphasis stays on edges/borders. */
+.app-shell .roadmap-flow .stage-card.process-step .stage-title,
+.app-shell .roadmap-flow .react-flow__node-stage .stage-description{
+  color:var(--text);
+}
+
+/* Dark map: keep route/procedure cards distinct from the canvas without touching selected or ancestor path states. */
+.app-shell.dark .roadmap-flow .react-flow__node-stage:not(.roadmap-node-ancestor) .stage-card:not(.situation-card):not(.selected){
+  border-color:rgba(237,240,244,.29);
+}
+.app-shell.dark .roadmap-flow .react-flow__node-stage:not(.roadmap-node-ancestor) .stage-card:not(.situation-card):not(.selected):hover{
+  border-color:rgba(237,240,244,.46);
+}
+
+/* The bracket heading shows its process keyword and the route-wide timing together.
+   Keep the label compact and anchored to the same midpoint as the dotted bracket. */
+.app-shell .procedure-group-bracket>span{
+ gap:9px;padding:4px 12px;font-size:13px;line-height:20px;
+ font-weight:650;max-width:min(560px,calc(100vw - 36px));
+}
+.app-shell .procedure-group-bracket>span>strong{font-weight:700;color:var(--text);white-space:nowrap}
+.app-shell .procedure-group-bracket .procedure-group-duration{
+ display:inline-flex;align-items:center;flex-shrink:0;
+ padding-left:9px;border-left:1px solid var(--border);
+ font-size:12px;font-weight:650;letter-spacing:-.15px;color:var(--secondary);
+ white-space:nowrap;
+}
+.app-shell .procedure-group-bracket .procedure-group-duration.is-unverified{
+ font-weight:500;color:var(--muted);
+}
+
+/* Only verified types of independent parallel procedures receive a third, quiet hint line. */
+.app-shell .roadmap-flow .stage-card .stage-parallel-note{
+ margin-top:5px;font-size:12px;line-height:17px;font-weight:650;
+ letter-spacing:-.3px;color:#387b77;white-space:nowrap;
+}
+.app-shell.dark .roadmap-flow .stage-card .stage-parallel-note{color:#8bc5c1}
+.app-shell .mobile-journey .journey-parallel-note{
+ display:block;margin-top:7px;font-size:12px;line-height:1.5;font-weight:650;color:#387b77;
+}
+.app-shell.dark .mobile-journey .journey-parallel-note{color:#8bc5c1}
+
+/* Completion is identified by a restrained green badge, not a fully tinted card. */
+.app-shell .roadmap-flow .stage-card.process-completion{
+ background:var(--panel)!important;border:1px solid var(--border)!important;
+ box-shadow:var(--surface-shadow)!important;
+}
+.app-shell .roadmap-flow .stage-card.process-completion .stage-title,
+.app-shell .roadmap-flow .stage-card.process-completion .stage-description{color:var(--text)}
+.app-shell .roadmap-flow .stage-card.process-completion .stage-card-footer{color:var(--secondary)}
+.app-shell .stage-pill.stage-completion,
+.app-shell .process-completion .stage-pill{background:#dff2e6!important;color:#216b43!important}
+.app-shell .roadmap-flow .stage-card.process-completion.selected{
+ border-color:#77ae8b!important;box-shadow:0 0 0 2px rgba(35,128,76,.12)!important;
+}
+.app-shell.dark .roadmap-flow .stage-card.process-completion{
+ background:var(--panel)!important;border-color:var(--border)!important;
+ box-shadow:var(--surface-shadow)!important;
+}
+.app-shell.dark .roadmap-flow .stage-card.process-completion .stage-title,
+.app-shell.dark .roadmap-flow .stage-card.process-completion .stage-description{color:var(--text)}
+.app-shell.dark .roadmap-flow .stage-card.process-completion .stage-card-footer{color:var(--secondary)}
+.app-shell.dark .stage-pill.stage-completion,
+.app-shell.dark .process-completion .stage-pill{background:#234232!important;color:#a9e3c0!important}
+
+/* Statutory prerequisites use a separate red line; ordinary advice remains neutral. */
+.app-shell .roadmap-flow .stage-card .stage-description.stage-description-required{
+ -webkit-line-clamp:2;
+}
+.app-shell .roadmap-flow .stage-card .stage-required-note{
+ display:block;margin-top:6px;max-width:100%;overflow:hidden;text-overflow:ellipsis;
+ white-space:nowrap;font-size:12px;line-height:17px;font-weight:680;
+ letter-spacing:-.28px;color:#bd3c48;
+}
+.app-shell.dark .roadmap-flow .stage-card .stage-required-note{color:#ff929c}
+.app-shell .mobile-journey .journey-required-note{
+ display:block;margin-top:7px;font-size:12px;line-height:1.5;font-weight:680;color:#bd3c48;
+}
+.app-shell.dark .mobile-journey .journey-required-note{color:#ff929c}

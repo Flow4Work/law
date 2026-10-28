@@ -1,0 +1,22 @@
+const fs=require('fs'),path=require('path'),ts=require('typescript'),Module=require('module'),assert=require('node:assert/strict');
+const file=path.join(__dirname,'../src/lib/intake.ts');
+const compiled=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+const loaded=new Module(file,module);loaded.filename=file;loaded.paths=module.paths;loaded._compile(compiled,file);
+const {recordIntakeAnswer}=loaded.exports;
+const questions=['어떤 절차를 진행했나요?','얼마를 받지 못했나요?','퇴사일은 언제인가요?'].map(question=>({question,choices:[]}));
+const original={id:'history-test',messages:[{id:'story',role:'user',content:'화면 검증용 예시',createdAt:'2026-10-27T00:00:00Z'}],intake:{original:'화면 검증용 예시',questions,routes:[],answers:[]}};
+const first=recordIntakeAnswer(original,{choice:'아직 진행하지 않았어요',detail:'회사에 문자로만 요구했어요'});
+assert.equal(original.messages.length,1);assert.equal(original.intake.answers.length,0);
+assert.deepEqual(first.messages.slice(-2).map(m=>[m.role,m.content]),[['assistant',questions[0].question],['user','아직 진행하지 않았어요\n회사에 문자로만 요구했어요']]);
+const reloaded=JSON.parse(JSON.stringify(first));
+const second=recordIntakeAnswer(reloaded,{choice:'',detail:'350만 원'});
+const third=recordIntakeAnswer(second,{choice:'정확히 모르겠어요',detail:''});
+assert.equal(third.intake.answers.length,3);assert.equal(third.messages.length,7);
+assert.deepEqual(third.messages.filter(m=>m.role==='assistant').map(m=>m.content),questions.map(q=>q.question));
+assert.equal(recordIntakeAnswer(third,{choice:'추가 답변',detail:''}),null);
+assert.equal(recordIntakeAnswer(original,{choice:' ',detail:''}),null);
+// A failed next-question request restores the pending question but retains the visible history.
+const restored={...original,messages:first.messages};
+const retried=recordIntakeAnswer(restored,{choice:'다시 확인한 답변',detail:''});
+assert.equal(retried.messages.length,3);assert.equal(retried.messages.at(-1).content,'다시 확인한 답변');
+console.log('PASS: question/answer history, free text, unknown answers, reload, three answers, and retry without duplicates');
