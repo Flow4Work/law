@@ -83,6 +83,33 @@ test('a fork continues straight to its first result before branching downward',(
  assert.equal(shuffled.edges.length,3,'incoming ports must work regardless of saved node order');
 });
 
+test('top alignment routes each first result from the closest shared source port without moving cards',()=>{
+ const stages=['root','upper','lower','upper-a','upper-b','lower-a'].map(id=>({id,title:id,status:'possible'}));
+ const links=[['root','upper'],['root','lower'],['upper','upper-a'],['upper','upper-b'],['lower','lower-a']]
+  .map(([source,target])=>({source,target}));
+ const top=calculateRoadmapLayout(stages,links,'top');
+ const center=calculateRoadmapLayout(stages,links,'center');
+ const positions=new Map(top.nodes.map(node=>[node.id,node]));
+ const source=positions.get('lower'),target=positions.get('lower-a');
+ assert.notEqual(source.position.y,target.position.y,'fixture must exercise packing drift');
+ const percent=source.data.sourcePorts[0];
+ const sourceY=source.position.y+ROADMAP_CARD.height*percent/100;
+ const targetY=target.position.y+ROADMAP_CARD.height/2;
+ const originalGap=Math.abs(source.position.y+ROADMAP_CARD.height/2-targetY);
+ assert.ok(Math.abs(sourceY-targetY)<originalGap,'top connector must reduce the unnecessary elbow');
+ assert.ok(percent>=10&&percent<=90,'handles must remain on their own cards');
+ const fork=positions.get('upper');
+ assert.equal(new Set(fork.data.sourcePorts).size,1,'all outgoing arrows share one origin');
+ const first=top.edges.find(edge=>edge.source==='upper'&&edge.target==='upper-a');
+ const firstPoints=routePoints(first,positions);
+ assert.equal(new Set(firstPoints.map(point=>point.y)).size,1,'already-aligned first child must remain straight');
+ const lowerEdge=top.edges.find(edge=>edge.source==='lower');
+ assert.ok(lowerEdge.data.branchMinY<=Math.min(sourceY,targetY));
+ assert.ok(lowerEdge.data.branchMaxY>=Math.max(sourceY,targetY));
+ for(const node of center.nodes)assert.ok(node.data.sourcePorts.every(port=>port===50),
+  'center alignment must retain centered handles');
+});
+
 test('Depth 2 keeps compact centered positions when final outcomes grow',()=>{
  const names=['root','upper','middle','lower','upper-step','middle-step','lower-step'];
  const basic=names.map(id=>({id,title:id,kind:id==='root'?'situation':id.includes('step')?'step':'route',status:'possible'}));
