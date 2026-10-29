@@ -22,6 +22,7 @@ test('shared branch uses one stem and selection colors only the chosen leg in bo
    const page=await context.newPage();
    await page.goto(process.env.MAP_QA_URL||'http://127.0.0.1:3700/',{waitUntil:'domcontentloaded'});
    await page.locator('.react-flow__edge').first().waitFor({timeout:14000});
+   await page.locator('.react-flow__edge-path[id$="-stem"]').waitFor({state:'attached',timeout:14000});
    assert.equal(await page.locator('.react-flow__edge-path[id$="-stem"]').count(),1,mode+' one common stem');
    await page.locator('.react-flow__node[data-id="choice-c"] .stage-open').evaluate(el=>el.click());
    await page.waitForTimeout(220);

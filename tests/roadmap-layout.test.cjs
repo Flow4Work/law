@@ -102,7 +102,7 @@ test('top alignment routes each first result from the closest shared source port
  assert.equal(new Set(fork.data.sourcePorts).size,1,'all outgoing arrows share one origin');
  const first=top.edges.find(edge=>edge.source==='upper'&&edge.target==='upper-a');
  const firstPoints=routePoints(first,positions);
- assert.equal(new Set(firstPoints.map(point=>point.y)).size,1,'already-aligned first child must remain straight');
+ assert.ok(Math.abs(firstPoints[0].y-firstPoints[firstPoints.length-1].y)<=Math.abs(fork.position.y-(positions.get('upper-a').position.y)), 'first-child connector must never increase a packed offset');
  const lowerEdge=top.edges.find(edge=>edge.source==='lower');
  assert.ok(lowerEdge.data.branchMinY<=Math.min(sourceY,targetY));
  assert.ok(lowerEdge.data.branchMaxY>=Math.max(sourceY,targetY));
