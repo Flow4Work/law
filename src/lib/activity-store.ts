@@ -4,7 +4,7 @@ import {mkdir,readFile,writeFile,rename,open} from 'node:fs/promises';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {decryptActivity,encryptActivity,privateIpKey} from './activity-crypto';
-import type {ActivityEvent,ActivityReport,ActivityLocationSnapshot} from './activity-types';
+import type {ActivityEvent,ActivityReport,ActivityLocationSnapshot,ActivitySite} from './activity-types';
 const cloud=()=>process.env.VERCEL==='1';
 const root=path.join(process.cwd(),'data','private-activity');
 const day=(at=Date.now())=>new Date(at+9*60*60*1000).toISOString().slice(0,10);
@@ -33,7 +33,7 @@ export async function appendActivity(event:ActivityEvent){
  const task=queue.then(append);
  queue=task.catch(()=>{});return task;
 }
-export async function readActivityReport(days:number):Promise<ActivityReport>{
+export async function readActivityReport(days:number,site:ActivitySite='law'):Promise<ActivityReport>{
  const count=[1,7,30].includes(days)?days:1;
  const journals:Journal[]=[],overflow:{pathname:string;uploadedAt:Date}[]=[];
  let overflowLimited=false;
@@ -44,8 +44,8 @@ export async function readActivityReport(days:number):Promise<ActivityReport>{
  }));
  const candidates=overflow.sort((a,b)=>new Date(b.uploadedAt).getTime()-new Date(a.uploadedAt).getTime()).slice(0,1000);
  for(let start=0;start<candidates.length;start+=16)journals.push(...await Promise.all(candidates.slice(start,start+16).map(async blob=>{const result=await get(blob.pathname,{access:'private',useCache:false});return result?.statusCode===200?decryptActivity<Journal>(await new Response(result.stream).text()):{events:[]}})));
- const all=Array.from(new Map(journals.flatMap(value=>value.events||[]).map(event=>[event.id,event])).values()).sort((a,b)=>b.at.localeCompare(a.at));
- return {events:all.slice(0,1000),total:all.length,visits:all.filter(event=>event.action==='visit').length,queries:all.filter(event=>event.action==='query').length,uniqueIps:new Set(all.map(event=>event.ip).filter(ip=>ip!=='확인 불가')).size,days:count,generatedAt:new Date().toISOString(),limited:journals.some(value=>value.limited)||all.length>1000||overflowLimited||overflow.length>1000};
+ const all=Array.from(new Map(journals.flatMap(value=>value.events||[]).map(event=>[event.id,event])).values()).filter(event=>(event.site||'law')===site).sort((a,b)=>b.at.localeCompare(a.at));
+ return {events:all.slice(0,1000),total:all.length,visits:all.filter(event=>event.action==='visit').length,queries:all.filter(event=>event.action==='query').length,views:all.filter(event=>event.action==='view_step').length,uniqueIps:new Set(all.map(event=>event.ip).filter(ip=>ip!=='확인 불가')).size,days:count,site,generatedAt:new Date().toISOString(),limited:journals.some(value=>value.limited)||all.length>1000||overflowLimited||overflow.length>1000};
 }
 /** Remember, per network address, the district a visitor confirmed from their own browser. */
 export async function readVerifiedDistrict(ip:string):Promise<string>{

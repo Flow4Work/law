@@ -8,7 +8,7 @@ const env={VERCEL:'1',LEGAL_CONNECTION_SECRET:secret,LEGAL_ADMIN_PATH:adminPath,
 function load(name,overrides={},extra={},globals={}){
  const source=fs.readFileSync(path.join(__dirname,'../src/lib',name+'.ts'),'utf8');
  const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
- const exports={};vm.runInNewContext(compiled,{exports,require:id=>id==='server-only'?{}:overrides[id]||(id.startsWith('@/geo/')?require(path.join(__dirname,'../src/geo',id.slice(6))):require(id)),process:{env:{...env,...extra},cwd:()=>'/test-workspace'},Buffer,Headers,Response,Date,setTimeout,clearTimeout,console,...globals});return exports;
+ const exports={};vm.runInNewContext(compiled,{exports,require:id=>id==='server-only'?{}:overrides[id]||(id.startsWith('@/geo/')?require(path.join(__dirname,'../src/geo',id.slice(6))):require(id)),process:{env:{...env,...extra},cwd:()=>'/test-workspace'},Buffer,Headers,Response,URL,Date,setTimeout,clearTimeout,console,...globals});return exports;
 }
 test('password-only admin authentication checks the hash and expires signed sessions',()=>{
  const api=load('activity-crypto');
@@ -222,4 +222,24 @@ test('cloud ingestion never depends on overwriting a shared journal',async()=>{
  assert.equal(store.entries.size,1);
  assert([...store.entries.keys()][0].startsWith('activity/overflow/'));
  const report=await api.readActivityReport(1);assert.equal(report.total,1);assert.equal(report.events[0].detail,event.detail);
+});
+test('the portfolio and the law service keep separate reports over one shared store',async()=>{
+ const store=fakeStore(),cipher=load('activity-crypto');
+ const api=load('activity-store',{'@vercel/blob':store.api,'./activity-crypto':cipher});
+ const base={at:new Date().toISOString(),city:'',district:'',country:'',location:'지역 확인 불가'};
+ await api.appendActivity({...base,id:'law-visit',ip:'203.0.113.1',action:'visit',detail:'/'});
+ await api.appendActivity({...base,id:'law-query',ip:'203.0.113.1',action:'query',detail:'퇴직금 질문'});
+ await api.appendActivity({...base,id:'portfolio-visit',ip:'203.0.113.2',site:'portfolio',action:'visit',detail:'/'});
+ await api.appendActivity({...base,id:'portfolio-open',ip:'203.0.113.2',site:'portfolio',action:'view_step',detail:'프로젝트: LAW PROJECT'});
+ const law=await api.readActivityReport(1);assert.equal(law.site,'law');assert.equal(law.total,2);
+ assert.deepEqual(law.events.map(event=>event.id).sort().join(','),'law-query,law-visit');
+ assert.equal(law.queries,1);assert.equal(law.views,0);assert.equal(law.uniqueIps,1);
+ const portfolio=await api.readActivityReport(1,'portfolio');assert.equal(portfolio.site,'portfolio');assert.equal(portfolio.total,2);
+ assert.deepEqual(portfolio.events.map(event=>event.id).sort().join(','),'portfolio-open,portfolio-visit');
+ assert.equal(portfolio.visits,1);assert.equal(portfolio.views,1);assert.equal(portfolio.queries,0);assert.equal(portfolio.uniqueIps,1);
+});
+test('only the portfolio origins may post portfolio records',()=>{
+ const {portfolioOriginAllowed}=load('portfolio-origin');
+ for(const origin of ['https://leopark-portfolio.vercel.app','https://leopark-portfolio-cpr3hd10a-flow4works-projects.vercel.app','http://localhost:3200','http://127.0.0.1:3200'])assert.equal(portfolioOriginAllowed(origin),true,origin);
+ for(const origin of [null,'','https://law-lake-theta.vercel.app','https://leopark-portfolio.vercel.app.evil.test','https://evil-leopark-portfolio.vercel.app','http://localhost.evil.test:3200','null','javascript:alert(1)'])assert.equal(portfolioOriginAllowed(origin),false,String(origin));
 });

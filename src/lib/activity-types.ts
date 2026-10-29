@@ -2,7 +2,11 @@ export const ACTIVITY_LABELS={visit:'서비스 접속',query:'질문 입력',ans
 export type ActivityAction=keyof typeof ACTIVITY_LABELS;
 export type ActivityDistrictSource='verified'|'ip-city'|'ip-postal'|'ip-coordinate'|'geo-city'|'geo-postal'|'geo-coordinate'|'unavailable';
 export type ActivityConfidence='high'|'medium'|'low';
-export type ActivityEvent={id:string;at:string;ip:string;ipVersion?:string;country:string;city:string;district:string;location:string;districtSource?:ActivityDistrictSource;districtConfidence?:ActivityConfidence;districtEvidence?:string;locationNote?:string;isp?:string;asn?:string;networkType?:string;networkRisk?:string;action:ActivityAction;detail:string};
+/** Which tracked site produced a record. Records saved before multi-site tracking are Law. */
+export const ACTIVITY_SITES={law:{label:'Law',host:'law-lake-theta.vercel.app',url:'https://law-lake-theta.vercel.app/'},portfolio:{label:'Portfolio',host:'leopark-portfolio.vercel.app',url:'https://leopark-portfolio.vercel.app/'}} as const;
+export type ActivitySite=keyof typeof ACTIVITY_SITES;
+export const isActivitySite=(value:unknown):value is ActivitySite=>value==='law'||value==='portfolio';
+export type ActivityEvent={id:string;at:string;ip:string;ipVersion?:string;country:string;city:string;district:string;location:string;districtSource?:ActivityDistrictSource;districtConfidence?:ActivityConfidence;districtEvidence?:string;locationNote?:string;isp?:string;asn?:string;networkType?:string;networkRisk?:string;site?:ActivitySite;action:ActivityAction;detail:string};
 /** Everything one IP resolves to, without the per-request address fields. */
 export type ActivityLocationSnapshot={country:string;city:string;district:string;location:string;districtSource:ActivityDistrictSource;districtConfidence:ActivityConfidence;districtEvidence:string;locationNote:string;isp:string;asn:string;networkType:string;networkRisk:string};
-export type ActivityReport={events:ActivityEvent[];total:number;visits:number;queries:number;uniqueIps:number;days:number;generatedAt:string;limited:boolean};
+export type ActivityReport={events:ActivityEvent[];total:number;visits:number;queries:number;views:number;uniqueIps:number;days:number;site:ActivitySite;generatedAt:string;limited:boolean};

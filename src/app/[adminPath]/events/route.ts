@@ -1,7 +1,7 @@
 import {NextRequest,NextResponse} from 'next/server';
 import {ADMIN_COOKIE,adminPathMatches,verifyAdminSession} from '@/lib/activity-crypto';
 import {readActivityReport,readIpLocation,readVerifiedDistrict} from '@/lib/activity-store';
-import type {ActivityEvent} from '@/lib/activity-types';
+import {isActivitySite,type ActivityEvent} from '@/lib/activity-types';
 export const runtime='nodejs';
 export const maxDuration=30;
 export const dynamic='force-dynamic';
@@ -41,7 +41,8 @@ export async function GET(request:NextRequest,{params}:{params:Promise<{adminPat
  const headers={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','X-Robots-Tag':'noindex, nofollow'};
  if(!verifyAdminSession(request.cookies.get(ADMIN_COOKIE)?.value))return NextResponse.json({error:'로그인이 필요합니다.'},{status:401,headers});
  try{
-  const report=await readActivityReport(Number(request.nextUrl.searchParams.get('days')||1));
+  const site=request.nextUrl.searchParams.get('site');
+  const report=await readActivityReport(Number(request.nextUrl.searchParams.get('days')||1),isActivitySite(site)?site:'law');
   return NextResponse.json({...report,events:await alignLocations(report.events)},{headers});
  }catch{console.warn('[private-admin] Activity storage read failed');return NextResponse.json({error:'기록을 불러오지 못했습니다. 다시 시도해주세요.'},{status:503,headers})}
 }
