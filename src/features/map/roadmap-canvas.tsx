@@ -64,21 +64,30 @@ function RoadmapConnector({id,sourceX,sourceY,targetX,targetY,markerEnd,style,da
    ?`M ${laneX} ${targetY-radius} Q ${laneX} ${targetY} ${laneX+radius} ${targetY} L ${targetX} ${targetY}`
    :`M ${laneX} ${targetY} L ${targetX} ${targetY}`;
   const selectedY=typeof data.sharedSelectedY==='number'?data.sharedSelectedY:null;
-  const activeEnd=selectedY===null?sourceY:selectedY<sourceY?selectedY+radius:selectedY>sourceY?selectedY-radius:sourceY;
-  const redStart=Math.max(trunkTop,Math.min(sourceY,activeEnd));
-  const redEnd=Math.min(trunkBottom,Math.max(sourceY,activeEnd));
   const neutralStyle={...style,stroke:'var(--map-edge)',strokeWidth:1.4};
   const activeStyle={...style,stroke:'var(--accent)',strokeWidth:2.1};
-  const vertical=(a:number,b:number)=>`M ${laneX} ${a} L ${laneX} ${b}`;
-  return <>{data.branchOwner===true&&<>
-    <BaseEdge id={id+'-stem'} path={`M ${sourceX} ${sourceY} L ${laneX} ${sourceY}`} style={selectedY===null?neutralStyle:activeStyle}/>
-    {redEnd>redStart+.5?<>
-      {redStart>trunkTop+.5&&<BaseEdge id={id+'-spine-before'} path={vertical(trunkTop,redStart)} style={neutralStyle}/>}
-      <BaseEdge id={id+'-spine-active'} path={vertical(redStart,redEnd)} style={activeStyle}/>
-      {trunkBottom>redEnd+.5&&<BaseEdge id={id+'-spine-after'} path={vertical(redEnd,trunkBottom)} style={neutralStyle}/>}
-    </>:trunkBottom>trunkTop+.5&&<BaseEdge id={id+'-spine'} path={vertical(trunkTop,trunkBottom)} style={neutralStyle}/>}
+  // Paint the entire neutral trunk first. Never split it into separate
+  // colored segments: a sibling edge can otherwise overpaint the short
+  // rounded join and leave a visible grey gap in the selected red route.
+  const spine=`M ${laneX} ${trunkTop} L ${laneX} ${trunkBottom}`;
+  // The selected route is one continuous overlay from the source handle all
+  // the way to the destination handle. Its last turn uses the exact radius
+  // of the shared leg, so the highlight cannot stop before the arrow.
+  const activeTop=selectedY!==null&&topCurve&&Math.abs(selectedY-minY)<.5;
+  const activeBottom=selectedY!==null&&bottomCurve&&Math.abs(selectedY-maxY)<.5;
+  const activePath=selectedY===null?'':activeTop
+    ?`M ${sourceX} ${sourceY} L ${laneX} ${sourceY} L ${laneX} ${selectedY+radius} Q ${laneX} ${selectedY} ${laneX+radius} ${selectedY} L ${targetX} ${selectedY}`
+    :activeBottom
+    ?`M ${sourceX} ${sourceY} L ${laneX} ${sourceY} L ${laneX} ${selectedY-radius} Q ${laneX} ${selectedY} ${laneX+radius} ${selectedY} L ${targetX} ${selectedY}`
+    :`M ${sourceX} ${sourceY} L ${laneX} ${sourceY} L ${laneX} ${selectedY} L ${targetX} ${selectedY}`;
+  return <>
+   {data.branchOwner===true&&<>
+    <BaseEdge id={id+'-stem'} path={`M ${sourceX} ${sourceY} L ${laneX} ${sourceY}`} style={neutralStyle}/>
+    {trunkBottom>trunkTop+.5&&<BaseEdge id={id+'-spine'} path={spine} style={neutralStyle}/>}
    </>}
-   <BaseEdge id={id} path={leg} markerEnd={markerEnd} style={style}/></>;
+   <BaseEdge id={id} path={leg} markerEnd={markerEnd} style={style}/>
+   {data.branchOwner===true&&selectedY!==null&&<BaseEdge id={id+'-focused-route'} path={activePath} style={activeStyle}/>}
+  </>;
  }
  // Single links use a rounded orthogonal path inside the empty gutter.
  const points=adjacent
@@ -194,6 +203,8 @@ export function Canvas({value,selected,focusId,onSelect,busy}:{value:LegalCase;s
    const ownsActiveStem=edge.data?.branchOwner===true&&sharedSelectedY!==undefined;
    return {...edge,data:{...edge.data,selectedBranch:highlighted,sharedSelectedY},
     className:highlighted?'path-focused':ownsActiveStem?undefined:focusedIds?'path-muted':undefined,
+    // The owner paints the uninterrupted highlight above all sibling legs.
+    zIndex:ownsActiveStem?10:edge.zIndex,
     style:{...edge.style,stroke:color,strokeWidth:highlighted?2.1:1.4},
     markerEnd:{type:MarkerType.ArrowClosed,color,width:12,height:12}};
   });
