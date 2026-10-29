@@ -1,5 +1,5 @@
 import {ingestActivity} from '@/lib/activity-ingest';
-import {portfolioOriginAllowed} from '@/lib/portfolio-origin';
+import {portfolioOriginAllowed} from '@/lib/site-origin';
 export const runtime='nodejs';
 export const maxDuration=30;
 const corsHeaders=(request:Request):Record<string,string>=>{

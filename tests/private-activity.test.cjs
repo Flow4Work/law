@@ -241,8 +241,44 @@ test('the portfolio and the law service keep separate reports over one shared st
  assert.equal(law.selfIp,'203.0.113.9','the busiest home-district IP is flagged');
  assert.equal(portfolio.selfIp,'203.0.113.9','both tabs flag the same IP, even when the portfolio alone never saw it twice');
 });
-test('only the portfolio origins may post portfolio records',()=>{
- const {portfolioOriginAllowed}=load('portfolio-origin');
+test('the map gets its own tab without borrowing the other two reports',async()=>{
+ const store=fakeStore(),cipher=load('activity-crypto');
+ const api=load('activity-store',{'@vercel/blob':store.api,'./activity-crypto':cipher});
+ const base={at:new Date().toISOString(),city:'',district:'',country:'',location:'지역 확인 불가'};
+ await api.appendActivity({...base,id:'map-visit',ip:'203.0.113.4',site:'mapforyou',action:'visit',detail:'/'});
+ await api.appendActivity({...base,id:'map-query',ip:'203.0.113.4',site:'mapforyou',action:'query',detail:'우동 · 홍대 · 카페 · 12곳'});
+ await api.appendActivity({...base,id:'map-open',ip:'203.0.113.5',site:'mapforyou',action:'view_step',detail:'가게: 스탠다드브레드'});
+ await api.appendActivity({...base,id:'law-visit',ip:'203.0.113.4',action:'visit',detail:'/'});
+ const map=await api.readActivityReport(1,'mapforyou');
+ assert.equal(map.site,'mapforyou');assert.equal(map.total,3);assert.equal(map.visits,1);assert.equal(map.queries,1);assert.equal(map.views,1);assert.equal(map.uniqueIps,2);
+ assert.equal(map.events.map(event=>event.id).sort().join(','),'map-open,map-query,map-visit');
+ assert.equal((await api.readActivityReport(1,'law')).total,1,'the law tab keeps only law records');
+ assert.equal((await api.readActivityReport(1,'portfolio')).total,0);
+});
+test('only the tracked sites own origins may post their records',()=>{
+ const {portfolioOriginAllowed,mapforyouOriginAllowed}=load('site-origin');
  for(const origin of ['https://leopark-portfolio.vercel.app','https://leopark-portfolio-cpr3hd10a-flow4works-projects.vercel.app','http://localhost:3200','http://127.0.0.1:3200'])assert.equal(portfolioOriginAllowed(origin),true,origin);
  for(const origin of [null,'','https://law-lake-theta.vercel.app','https://leopark-portfolio.vercel.app.evil.test','https://evil-leopark-portfolio.vercel.app','http://localhost.evil.test:3200','null','javascript:alert(1)'])assert.equal(portfolioOriginAllowed(origin),false,String(origin));
+ for(const origin of ['https://mapforyou.vercel.app','https://mapforyou-9sk2ld-flow4works-projects.vercel.app','http://localhost:3000','http://127.0.0.1:3000'])assert.equal(mapforyouOriginAllowed(origin),true,origin);
+ for(const origin of [null,'','https://law-lake-theta.vercel.app','https://leopark-portfolio.vercel.app','https://mapforyou.vercel.app.evil.test','https://evil-mapforyou.vercel.app','https://mapforyou-vercel-app.attacker.test','http://localhost.evil.test:3000'])assert.equal(mapforyouOriginAllowed(origin),false,String(origin));
+ assert.equal(portfolioOriginAllowed('https://mapforyou.vercel.app'),false,'one site cannot write another site tab');
+});
+test('the map relay endpoint only accepts its own origin and forwards the visitor address untouched',async()=>{
+ const seen=[];
+ const ingest={ingestActivity:async(request,site)=>{seen.push({site,headers:new Headers(request.headers),body:await request.text()});return new Response(null,{status:204})}};
+ const source=fs.readFileSync(path.join(__dirname,'../src/app/api/mapforyou-activity/route.ts'),'utf8');
+ const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
+ const route={exports:{}};
+ vm.runInNewContext(compiled,{exports:route.exports,require:id=>id==='@/lib/activity-ingest'?ingest:load('site-origin'),process,Request,Headers,Response,URL,console});
+ const send=async(headers)=>route.exports.POST(new Request('https://law-lake-theta.vercel.app/api/mapforyou-activity',{method:'POST',headers,body:JSON.stringify({action:'visit',detail:'/'})}));
+ assert.equal((await send({origin:'https://evil-mapforyou.vercel.app'})).status,403);
+ assert.equal((await send({})).status,403);
+ assert.equal(seen.length,0,'a refused origin never reaches the store');
+ const accepted=await send({origin:'https://mapforyou.vercel.app','x-visitor-ip':'203.0.113.7','x-visitor-city':'Seoul','x-visitor-country':'KR','x-visitor-region':'11','x-forwarded-for':'198.51.100.9','x-vercel-ip-city':'Busan'});
+ assert.equal(accepted.status,204);
+ assert.equal(seen.length,1);assert.equal(seen[0].site,'mapforyou');
+ assert.equal(seen[0].headers.get('x-vercel-forwarded-for'),'203.0.113.7');
+ assert.equal(seen[0].headers.get('x-vercel-ip-city'),'Seoul');
+ assert.equal(seen[0].headers.has('x-visitor-ip'),false,'relayed fields are renamed before the store sees them');
+ assert.equal(seen[0].body,JSON.stringify({action:'visit',detail:'/'}));
 });
