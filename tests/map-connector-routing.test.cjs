@@ -28,8 +28,12 @@ test('shared branch uses one stem and selection colors only the chosen leg in bo
    const stem=await page.locator('.react-flow__edge-path[id$="-stem"]').evaluate(el=>({d:el.getAttribute('d'),stroke:getComputedStyle(el).stroke}));
    const parts=stem.d.match(/^M ([^ ]+) ([^ ]+) L ([^ ]+) ([^ ]+)/);
    assert(parts,mode+' parse stem');
-   assert.equal(stem.stroke,'rgb(200, 16, 46)',mode+' selected stem');
+   assert.notEqual(stem.stroke,'rgb(200, 16, 46)',mode+' neutral shared stem');
    const laneX=Number(parts[3]);
+   const overlay=await page.locator('.react-flow__edge-path[id$="-focused-route"]').evaluateAll(els=>els.map(el=>({d:el.getAttribute('d'),stroke:getComputedStyle(el).stroke})));
+   assert.equal(overlay.length,1,mode+' one uninterrupted selected-route overlay');
+   assert.equal(overlay[0].stroke,'rgb(200, 16, 46)',mode+' overlay highlighted red');
+   assert.ok(overlay[0].d.startsWith('M '+parts[1]+' '+parts[2]+' L '+laneX+' '+parts[2]),mode+' highlight starts at the parent port');
    const redBranches=await page.locator('.react-flow__edge.path-focused .react-flow__edge-path').evaluateAll(els=>els.map(el=>({id:el.id,d:el.getAttribute('d'),stroke:getComputedStyle(el).stroke})));
    assert.equal(redBranches.length,1,mode+' only selected child leg highlighted');
    assert.ok(redBranches[0].d.startsWith('M '+laneX+' '),mode+' red leg begins at split, not at parent');
