@@ -13,3 +13,5 @@ data/
 *.before-law-showcase-*
 *.camera-backup
 *.showcase-scroll-backup
+
+.vercel
