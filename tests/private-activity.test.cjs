@@ -229,14 +229,17 @@ test('the portfolio and the law service keep separate reports over one shared st
  const base={at:new Date().toISOString(),city:'',district:'',country:'',location:'지역 확인 불가'};
  await api.appendActivity({...base,id:'law-visit',ip:'203.0.113.1',action:'visit',detail:'/'});
  await api.appendActivity({...base,id:'law-query',ip:'203.0.113.1',action:'query',detail:'퇴직금 질문'});
- await api.appendActivity({...base,id:'portfolio-visit',ip:'203.0.113.2',site:'portfolio',action:'visit',detail:'/'});
- await api.appendActivity({...base,id:'portfolio-open',ip:'203.0.113.2',site:'portfolio',action:'view_step',detail:'프로젝트: LAW PROJECT'});
- const law=await api.readActivityReport(1);assert.equal(law.site,'law');assert.equal(law.total,2);
- assert.deepEqual(law.events.map(event=>event.id).sort().join(','),'law-query,law-visit');
- assert.equal(law.queries,1);assert.equal(law.views,0);assert.equal(law.uniqueIps,1);
+ await api.appendActivity({...base,id:'owner-law',ip:'203.0.113.9',district:'광진구',location:'서울특별시 광진구',action:'visit',detail:'/'});
+ await api.appendActivity({...base,id:'portfolio-visit',ip:'203.0.113.9',district:'광진구',location:'서울특별시 광진구',site:'portfolio',action:'visit',detail:'/'});
+ await api.appendActivity({...base,id:'portfolio-open',ip:'203.0.113.9',district:'광진구',location:'서울특별시 광진구',site:'portfolio',action:'view_step',detail:'프로젝트: LAW PROJECT'});
+ const law=await api.readActivityReport(1);assert.equal(law.site,'law');assert.equal(law.total,3);
+ assert.deepEqual(law.events.map(event=>event.id).sort().join(','),'law-query,law-visit,owner-law');
+ assert.equal(law.queries,1);assert.equal(law.views,0);assert.equal(law.uniqueIps,2);
  const portfolio=await api.readActivityReport(1,'portfolio');assert.equal(portfolio.site,'portfolio');assert.equal(portfolio.total,2);
  assert.deepEqual(portfolio.events.map(event=>event.id).sort().join(','),'portfolio-open,portfolio-visit');
  assert.equal(portfolio.visits,1);assert.equal(portfolio.views,1);assert.equal(portfolio.queries,0);assert.equal(portfolio.uniqueIps,1);
+ assert.equal(law.selfIp,'203.0.113.9','the busiest home-district IP is flagged');
+ assert.equal(portfolio.selfIp,'203.0.113.9','both tabs flag the same IP, even when the portfolio alone never saw it twice');
 });
 test('only the portfolio origins may post portfolio records',()=>{
  const {portfolioOriginAllowed}=load('portfolio-origin');

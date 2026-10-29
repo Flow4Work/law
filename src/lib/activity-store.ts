@@ -33,6 +33,20 @@ export async function appendActivity(event:ActivityEvent){
  const task=queue.then(append);
  queue=task.catch(()=>{});return task;
 }
+/** The owner is guessed as the IP that most often appears from the home district. */
+const HOME_DISTRICT='광진구';
+function ownerIpOf(events:ActivityEvent[]){
+ const seen=new Map<string,{count:number;latest:string}>();
+ for(const event of events){
+  if(event.district!==HOME_DISTRICT||!event.ip||event.ip==='확인 불가'||event.ip==='127.0.0.1')continue;
+  const entry=seen.get(event.ip);
+  if(entry){entry.count++;if(event.at>entry.latest)entry.latest=event.at}
+  else seen.set(event.ip,{count:1,latest:event.at});
+ }
+ let best='',bestCount=0,bestLatest='';
+ for(const [ip,entry] of seen)if(entry.count>bestCount||(entry.count===bestCount&&entry.latest>bestLatest)){best=ip;bestCount=entry.count;bestLatest=entry.latest}
+ return best;
+}
 export async function readActivityReport(days:number,site:ActivitySite='law'):Promise<ActivityReport>{
  const count=[1,7,30].includes(days)?days:1;
  const journals:Journal[]=[],overflow:{pathname:string;uploadedAt:Date}[]=[];
@@ -44,8 +58,11 @@ export async function readActivityReport(days:number,site:ActivitySite='law'):Pr
  }));
  const candidates=overflow.sort((a,b)=>new Date(b.uploadedAt).getTime()-new Date(a.uploadedAt).getTime()).slice(0,1000);
  for(let start=0;start<candidates.length;start+=16)journals.push(...await Promise.all(candidates.slice(start,start+16).map(async blob=>{const result=await get(blob.pathname,{access:'private',useCache:false});return result?.statusCode===200?decryptActivity<Journal>(await new Response(result.stream).text()):{events:[]}})));
- const all=Array.from(new Map(journals.flatMap(value=>value.events||[]).map(event=>[event.id,event])).values()).filter(event=>(event.site||'law')===site).sort((a,b)=>b.at.localeCompare(a.at));
- return {events:all.slice(0,1000),total:all.length,visits:all.filter(event=>event.action==='visit').length,queries:all.filter(event=>event.action==='query').length,views:all.filter(event=>event.action==='view_step').length,uniqueIps:new Set(all.map(event=>event.ip).filter(ip=>ip!=='확인 불가')).size,days:count,site,generatedAt:new Date().toISOString(),limited:journals.some(value=>value.limited)||all.length>1000||overflowLimited||overflow.length>1000};
+ const unique=Array.from(new Map(journals.flatMap(value=>value.events||[]).map(event=>[event.id,event])).values());
+ // The owner is guessed once, across every tab, so both views mark the same network.
+ const selfIp=ownerIpOf(unique);
+ const all=unique.filter(event=>(event.site||'law')===site).sort((a,b)=>b.at.localeCompare(a.at));
+ return {events:all.slice(0,1000),total:all.length,visits:all.filter(event=>event.action==='visit').length,queries:all.filter(event=>event.action==='query').length,views:all.filter(event=>event.action==='view_step').length,uniqueIps:new Set(all.map(event=>event.ip).filter(ip=>ip!=='확인 불가')).size,days:count,site,selfIp,generatedAt:new Date().toISOString(),limited:journals.some(value=>value.limited)||all.length>1000||overflowLimited||overflow.length>1000};
 }
 /** Remember, per network address, the district a visitor confirmed from their own browser. */
 export async function readVerifiedDistrict(ip:string):Promise<string>{
