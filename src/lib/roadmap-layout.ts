@@ -186,13 +186,27 @@ export function calculateRoadmapLayout(stages:RoadmapNode[],paths:RoadmapEdge[],
     incomingIds.get(stage.id)!.forEach((edge,i)=>ports.get(edge.id)!.targetIndex=i);
   }
 
+  // Keep the first adjacent result horizontal in top alignment even when
+  // downstream packing shifts the child's card. This moves only the shared
+  // output handle, never the parent card or another branch's geometry.
+  const sourcePorts=new Map<string,number>();
+  for(const stage of stages){
+    const place=places.get(stage.id)!;
+    const first=outgoingIds.get(stage.id)!.find(edge=>
+      places.get(edge.target)!.depth===place.depth+1);
+    const firstPlace=first?places.get(first.target):undefined;
+    const desired=alignment==='top'&&firstPlace
+      ?50+(firstPlace.y-place.y)*100/ROADMAP_CARD.height:50;
+    // A port must remain on the card's side, even for distant children.
+    sourcePorts.set(stage.id,Math.max(10,Math.min(90,desired)));
+  }
   const nodes:Node[]=stages.map(stage=>{
     const p=places.get(stage.id)!;
     return {
       id:stage.id,type:'stage',position:{x:p.x,y:p.y},
       style:{width:ROADMAP_CARD.width,height:ROADMAP_CARD.height},
       draggable:false,ariaLabel:stage.title,
-      data:{stage,sourcePorts:handleOffsets(Math.max(1,outgoingIds.get(stage.id)!.length)),
+      data:{stage,sourcePorts:Array(Math.max(1,outgoingIds.get(stage.id)!.length)).fill(sourcePorts.get(stage.id)??50),
         targetPorts:handleOffsets(Math.max(1,incomingIds.get(stage.id)!.length)),
         branchHint:incomingIds.get(stage.id)!.find(edge=>edge.label&&edge.label.length>8)?.label},
     };
@@ -214,7 +228,7 @@ export function calculateRoadmapLayout(stages:RoadmapNode[],paths:RoadmapEdge[],
     const entries=[...groups.entries()].sort(([a],[b])=>
       (places.get(a)!.y-places.get(b)!.y)||(original.get(a)!-original.get(b)!));
     entries.forEach(([source,branches],index)=>{
-      const sourceY=places.get(source)!.y+ROADMAP_CARD.height/2;
+      const sourceY=places.get(source)!.y+ROADMAP_CARD.height*(sourcePorts.get(source)??50)/100;
       const targetYs=branches.map(edge=>places.get(edge.target)!.y+ROADMAP_CARD.height/2);
       const spanMin=Math.min(sourceY,...targetYs);
       const spanMax=Math.max(sourceY,...targetYs);
@@ -228,7 +242,7 @@ export function calculateRoadmapLayout(stages:RoadmapNode[],paths:RoadmapEdge[],
     const s=places.get(edge.source)!;
     const t=places.get(edge.target)!;
     const port=ports.get(edge.id)!;
-    const sp=handleOffsets(Math.max(1,outgoingIds.get(edge.source)!.length))[port.sourceIndex];
+    const sp=sourcePorts.get(edge.source)??50;
     const tp=handleOffsets(Math.max(1,incomingIds.get(edge.target)!.length))[port.targetIndex];
     const sourceY=s.y+ROADMAP_CARD.height*sp/100;
     const targetY=t.y+ROADMAP_CARD.height*tp/100;
