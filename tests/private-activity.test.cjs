@@ -282,3 +282,48 @@ test('the map relay endpoint only accepts its own origin and forwards the visito
  assert.equal(seen[0].headers.has('x-visitor-ip'),false,'relayed fields are renamed before the store sees them');
  assert.equal(seen[0].body,JSON.stringify({action:'visit',detail:'/'}));
 });
+
+test('the scout gets its own tab without touching the other reports',async()=>{
+ const store=fakeStore(),cipher=load('activity-crypto');
+ const api=load('activity-store',{'@vercel/blob':store.api,'./activity-crypto':cipher});
+ const base={at:new Date().toISOString(),city:'',district:'',country:'',location:'지역 확인 불가'};
+ await api.appendActivity({...base,id:'scout-visit',ip:'203.0.113.6',site:'scout',action:'visit',detail:'/'});
+ await api.appendActivity({...base,id:'scout-visit-again',ip:'203.0.113.6',site:'scout',action:'visit',detail:'/index.html'});
+ await api.appendActivity({...base,id:'scout-query',ip:'203.0.113.7',site:'scout',action:'query',detail:'AI 대화'});
+ await api.appendActivity({...base,id:'law-visit',ip:'203.0.113.6',action:'visit',detail:'/'});
+ const scout=await api.readActivityReport(1,'scout');
+ assert.equal(scout.site,'scout');assert.equal(scout.total,3);assert.equal(scout.visits,2);assert.equal(scout.queries,1);assert.equal(scout.views,0);assert.equal(scout.uniqueIps,2);
+ assert.equal(scout.events.map(event=>event.id).sort().join(','),'scout-query,scout-visit,scout-visit-again');
+ assert.equal((await api.readActivityReport(1,'law')).total,1,'the law tab keeps only law records');
+ assert.equal((await api.readActivityReport(1,'portfolio')).total,0);
+ assert.equal((await api.readActivityReport(1,'mapforyou')).total,0);
+});
+
+test('only the scout own origins may post scout records',()=>{
+ const {scoutOriginAllowed,portfolioOriginAllowed,mapforyouOriginAllowed}=load('site-origin');
+ for(const origin of ['https://influencer-scout-ten.vercel.app','https://influencer-scout-7z82hxlyd-flow4works-projects.vercel.app','http://localhost:3500','http://127.0.0.1:3500'])assert.equal(scoutOriginAllowed(origin),true,origin);
+ for(const origin of [null,'','https://law-lake-theta.vercel.app','https://leopark-portfolio.vercel.app','https://influencer-scout-ten.vercel.app.evil.test','https://evil-influencer-scout-ten.vercel.app','https://influencer-scout-ten-vercel-app.attacker.test','http://localhost.evil.test:3500','javascript:alert(1)'])assert.equal(scoutOriginAllowed(origin),false,String(origin));
+ assert.equal(scoutOriginAllowed('https://mapforyou.vercel.app'),false,'one site cannot write another site tab');
+ assert.equal(portfolioOriginAllowed('https://influencer-scout-ten.vercel.app'),false);
+ assert.equal(mapforyouOriginAllowed('https://influencer-scout-ten.vercel.app'),false);
+});
+
+test('the scout relay endpoint only accepts its own origin and forwards the visitor address untouched',async()=>{
+ const seen=[];
+ const ingest={ingestActivity:async(request,site)=>{seen.push({site,headers:new Headers(request.headers),body:await request.text()});return new Response(null,{status:204})}};
+ const source=fs.readFileSync(path.join(__dirname,'../src/app/api/scout-activity/route.ts'),'utf8');
+ const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
+ const route={exports:{}};
+ vm.runInNewContext(compiled,{exports:route.exports,require:id=>id==='@/lib/activity-ingest'?ingest:load('site-origin'),process,Request,Headers,Response,URL,console});
+ const send=async(headers)=>route.exports.POST(new Request('https://law-lake-theta.vercel.app/api/scout-activity',{method:'POST',headers,body:JSON.stringify({action:'visit',detail:'/'})}));
+ assert.equal((await send({origin:'https://evil-influencer-scout-ten.vercel.app'})).status,403);
+ assert.equal((await send({})).status,403);
+ assert.equal(seen.length,0,'a refused origin never reaches the store');
+ const accepted=await send({origin:'https://influencer-scout-ten.vercel.app','x-visitor-ip':'203.0.113.8','x-visitor-city':'Seoul','x-visitor-country':'KR','x-visitor-region':'11','x-forwarded-for':'198.51.100.9','x-vercel-ip-city':'Busan'});
+ assert.equal(accepted.status,204);
+ assert.equal(seen.length,1);assert.equal(seen[0].site,'scout');
+ assert.equal(seen[0].headers.get('x-vercel-forwarded-for'),'203.0.113.8');
+ assert.equal(seen[0].headers.get('x-vercel-ip-city'),'Seoul');
+ assert.equal(seen[0].headers.has('x-visitor-ip'),false,'relayed fields are renamed before the store sees them');
+ assert.equal(seen[0].body,JSON.stringify({action:'visit',detail:'/'}));
+});
