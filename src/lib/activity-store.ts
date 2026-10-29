@@ -1,135 +1,67 @@
 import 'server-only';
-import {get,put,list,BlobPreconditionFailedError,BlobNotFoundError} from '@vercel/blob';
 import {mkdir,readFile,writeFile,rename,open} from 'node:fs/promises';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {decryptActivity,encryptActivity,privateIpKey} from './activity-crypto';
 import type {ActivityEvent,ActivityReport,ActivityLocationSnapshot,ActivitySite} from './activity-types';
-const cloud=()=>process.env.VERCEL==='1';
+import {activityDatabaseConfigured,appendDatabaseActivity,readDatabaseReport,readDatabaseLocation,saveDatabaseLocation,claimDatabaseAttempt,type ActivityPage} from './activity-db';
 const root=path.join(process.cwd(),'data','private-activity');
-const day=(at=Date.now())=>new Date(at+9*60*60*1000).toISOString().slice(0,10);
-type Journal={events:ActivityEvent[];limited?:boolean};
-// Overflow objects are immutable. Reuse bounded reads across tabs and concurrent requests.
-const eventReads=new Map<string,{expires:number;value:Promise<Journal>}>();
-function readEventJournal(key:string):Promise<Journal>{
- const cached=eventReads.get(key);
- if(cached&&cached.expires>Date.now())return cached.value;
- const value=(async()=>{
-  const result=await get(key,{access:'private',useCache:false});
-  if(!result||result.statusCode!==200)throw new Error('Activity event unavailable');
-  return decryptActivity<Journal>(await new Response(result.stream).text());
- })();
- const entry={expires:Date.now()+600000,value};
- eventReads.delete(key);eventReads.set(key,entry);
- while(eventReads.size>2000)eventReads.delete(eventReads.keys().next().value!);
- void value.catch(()=>{if(eventReads.get(key)===entry)eventReads.delete(key)});
- return value;
+const day=(at=Date.now())=>new Date(at+9*3600000).toISOString().slice(0,10);
+function localOnly(){if(process.env.VERCEL==='1')throw new Error('LAW activity database is required in production')}
+async function readLocal<T>(key:string):Promise<T|null>{
+ localOnly();try{return decryptActivity<T>(await readFile(path.join(root,key+'.enc'),'utf8'))}
+ catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return null;throw error}
 }
-const conflicts=(error:unknown)=>error instanceof BlobPreconditionFailedError||/already exists|precondition|412|409/i.test(error&&typeof error==='object'&&'message' in error?String(error.message):'');
-async function readJournal(key:string):Promise<{value:Journal;etag?:string}>{
- if(!cloud()){try{return {value:decryptActivity<Journal>(await readFile(path.join(root,key+'.enc'),'utf8'))}}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return {value:{events:[]}};throw error}}
- try{const result=await get('activity/days/'+key+'.enc',{access:'private',useCache:false});if(!result||result.statusCode!==200)return {value:{events:[]}};return {value:decryptActivity<Journal>(await new Response(result.stream).text()),etag:result.blob.etag}}
- catch(error){if(error instanceof BlobNotFoundError)return {value:{events:[]}};throw error}
+async function writeLocal(key:string,value:unknown){
+ localOnly();const filename=path.join(root,key+'.enc');await mkdir(path.dirname(filename),{recursive:true});
+ const temporary=filename+'.'+randomUUID()+'.tmp';await writeFile(temporary,encryptActivity(value),{mode:0o600});await rename(temporary,filename);
 }
 let queue=Promise.resolve();
+const reportAttempts=new Map<string,{start:number;count:number}>();
+export async function claimReportAttempt(ip:string){
+ if(activityDatabaseConfigured())return claimDatabaseAttempt(ip,'report',30);
+ localOnly();const now=Date.now(),old=reportAttempts.get(ip);
+ if(old&&now-old.start<60000)return ++old.count<=30;
+ reportAttempts.set(ip,{start:now,count:1});while(reportAttempts.size>1000)reportAttempts.delete(reportAttempts.keys().next().value!);return true;
+}
 export async function appendActivity(event:ActivityEvent){
- const key=day(Date.parse(event.at));
- if(cloud()){
-  // Each event has a unique immutable object. Concurrent serverless requests
-  // never need to read, overwrite, or retry a shared daily document.
-  await put('activity/overflow/'+key+'/'+event.id+'.enc',encryptActivity({events:[event]}),{access:'private',addRandomSuffix:false,allowOverwrite:false,contentType:'application/octet-stream'});
-  return;
- }
- const append=async()=>{
-  const {value}=await readJournal(key);
-  const next:Journal={events:[...(value.events||[]),event].slice(-2000),limited:value.limited||(value.events||[]).length>=2000};
-  await mkdir(root,{recursive:true});const temporary=path.join(root,key+'-'+randomUUID()+'.tmp');
-  await writeFile(temporary,encryptActivity(next),{mode:0o600});await rename(temporary,path.join(root,key+'.enc'));
- };
- const task=queue.then(append);
- queue=task.catch(()=>{});return task;
+ if(activityDatabaseConfigured())return appendDatabaseActivity(event);
+ localOnly();
+ const task=queue.then(async()=>{const key=day(Date.parse(event.at)),journal=await readLocal<{events:ActivityEvent[]}>(key)||{events:[]};
+  if(!journal.events.some(saved=>saved.id===event.id)){journal.events.push(event);await writeLocal(key,journal)}
+ });queue=task.catch(()=>{});return task;
 }
-/** The owner is guessed as the IP that most often appears from the home district. */
-const HOME_DISTRICT='광진구';
-function ownerIpOf(events:ActivityEvent[]){
- const seen=new Map<string,{count:number;latest:string}>();
- for(const event of events){
-  if(event.district!==HOME_DISTRICT||!event.ip||event.ip==='확인 불가'||event.ip==='127.0.0.1')continue;
-  const entry=seen.get(event.ip);
-  if(entry){entry.count++;if(event.at>entry.latest)entry.latest=event.at}
-  else seen.set(event.ip,{count:1,latest:event.at});
- }
- let best='',bestCount=0,bestLatest='';
- for(const [ip,entry] of seen)if(entry.count>bestCount||(entry.count===bestCount&&entry.latest>bestLatest)){best=ip;bestCount=entry.count;bestLatest=entry.latest}
- return best;
+export async function readActivityReport(days:number,site:ActivitySite='law',cursor:ActivityPage|null=null):Promise<ActivityReport>{
+ if(activityDatabaseConfigured())return readDatabaseReport(days,site,cursor);
+ localOnly();const all:ActivityEvent[]=[];
+ for(let offset=0;offset<days;offset++)all.push(...(await readLocal<{events:ActivityEvent[]}>(day(Date.now()-offset*86400000)))?.events||[]);
+ const events=all.filter(event=>(event.site||'law')===site).sort((a,b)=>b.at.localeCompare(a.at)||b.id.localeCompare(a.id));
+ const page=events.filter(event=>!cursor||event.at<cursor.at||event.at===cursor.at&&event.id<cursor.id).slice(0,51),last=page[49];
+ return {events:page.slice(0,50),total:events.length,visits:events.filter(e=>e.action==='visit').length,queries:events.filter(e=>e.action==='query').length,
+  views:events.filter(e=>e.action==='view_step').length,uniqueIps:new Set(events.map(e=>e.ip)).size,visitors:new Set(events.map(e=>e.visitorId||e.ip)).size,
+  days,site,generatedAt:new Date().toISOString(),limited:page.length>50,source:'database',statisticsScope:'period',
+  nextCursor:page.length>50?Buffer.from(JSON.stringify({at:last.at,id:last.id})).toString('base64url'):null};
 }
-export async function readActivityReport(days:number,site:ActivitySite='law'):Promise<ActivityReport>{
- const count=[1,7,30].includes(days)?days:1;
- const journals:Journal[]=[],overflow:{pathname:string;uploadedAt:Date}[]=[];
- let overflowLimited=false;
- for(let start=0;start<count;start+=5)await Promise.all(Array.from({length:Math.min(5,count-start)},async(_,offset)=>{
-  const key=day(Date.now()-(start+offset)*86400000);
-  journals.push((await readJournal(key)).value);
-  if(cloud()){const result=await list({prefix:'activity/overflow/'+key+'/',limit:1000});overflow.push(...result.blobs);overflowLimited||=result.hasMore}
- }));
- const candidates=overflow.sort((a,b)=>new Date(b.uploadedAt).getTime()-new Date(a.uploadedAt).getTime()).slice(0,1000);
- for(let start=0;start<candidates.length;start+=16)journals.push(...await Promise.all(candidates.slice(start,start+16).map(blob=>readEventJournal(blob.pathname))));
- const unique=Array.from(new Map(journals.flatMap(value=>value.events||[]).map(event=>[event.id,event])).values());
- // The owner is guessed once, across every tab, so both views mark the same network.
- const selfIp=ownerIpOf(unique);
- const all=unique.filter(event=>(event.site||'law')===site).sort((a,b)=>b.at.localeCompare(a.at));
- return {events:all.slice(0,1000),total:all.length,visits:all.filter(event=>event.action==='visit').length,queries:all.filter(event=>event.action==='query').length,views:all.filter(event=>event.action==='view_step').length,uniqueIps:new Set(all.map(event=>event.ip).filter(ip=>ip!=='확인 불가')).size,days:count,site,selfIp,generatedAt:new Date().toISOString(),limited:journals.some(value=>value.limited)||all.length>1000||overflowLimited||overflow.length>1000};
-}
-/** Remember, per network address, the district a visitor confirmed from their own browser. */
-export async function readVerifiedDistrict(ip:string):Promise<string>{
- const key='activity/verified/'+privateIpKey(ip)+'.enc';
- try{
-  if(cloud()){
-   const result=await get(key,{access:'private',useCache:false});
-   if(!result||result.statusCode!==200)return '';
-   const value=decryptActivity<{district:string}>(await new Response(result.stream).text());
-   return typeof value?.district==='string'?value.district.slice(0,10):'';
-  }
-  const value=decryptActivity<{district:string}>(await readFile(path.join(root,'verified',privateIpKey(ip)+'.enc'),'utf8'));
-  return typeof value?.district==='string'?value.district.slice(0,10):'';
- }catch{return ''}
+export async function readVerifiedDistrict(ip:string){
+ return activityDatabaseConfigured()?await readDatabaseLocation<string>(ip,'verified')||'':(await readLocal<{district:string}>('verified/'+privateIpKey(ip)))?.district||'';
 }
 export async function saveVerifiedDistrict(ip:string,district:string){
- if(!district)return;
- const key='activity/verified/'+privateIpKey(ip)+'.enc',body=encryptActivity({district,at:new Date().toISOString()});
- if(cloud()){await put(key,body,{access:'private',addRandomSuffix:false,allowOverwrite:true,contentType:'application/octet-stream'});return}
- const dir=path.join(root,'verified');await mkdir(dir,{recursive:true});
- const temporary=path.join(dir,privateIpKey(ip)+'-'+randomUUID()+'.tmp');
- await writeFile(temporary,body,{mode:0o600});await rename(temporary,path.join(root,'verified',privateIpKey(ip)+'.enc'));
+ if(activityDatabaseConfigured())return saveDatabaseLocation(ip,'verified',district);
+ return writeLocal('verified/'+privateIpKey(ip),{district});
 }
-/** One IP keeps the same answer for a day, even when a later request lands on another instance. */
-const LOCATION_TTL=24*60*60*1000;
 export async function readIpLocation(ip:string):Promise<ActivityLocationSnapshot|null>{
- const name=privateIpKey(ip)+'.enc';
- try{
-  const value=cloud()
-   ?await (async()=>{const result=await get('activity/locations/'+name,{access:'private',useCache:false});return result?.statusCode===200?decryptActivity<{at:string;snapshot:ActivityLocationSnapshot}>(await new Response(result.stream).text()):null})()
-   :decryptActivity<{at:string;snapshot:ActivityLocationSnapshot}>(await readFile(path.join(root,'locations',name),'utf8'));
-  if(!value||!value.snapshot||typeof value.at!=='string')return null;
-  return Date.now()-new Date(value.at).getTime()<LOCATION_TTL?value.snapshot:null;
- }catch{return null}
+ if(activityDatabaseConfigured())return readDatabaseLocation<ActivityLocationSnapshot>(ip,'location');
+ const stored=await readLocal<{at:string;snapshot:ActivityLocationSnapshot}>('locations/'+privateIpKey(ip));
+ return stored&&Date.now()-Date.parse(stored.at)<86400000?stored.snapshot:null;
 }
 export async function saveIpLocation(ip:string,snapshot:ActivityLocationSnapshot){
- const name=privateIpKey(ip)+'.enc',body=encryptActivity({at:new Date().toISOString(),snapshot});
- if(cloud()){await put('activity/locations/'+name,body,{access:'private',addRandomSuffix:false,allowOverwrite:true,contentType:'application/octet-stream'});return}
- const dir=path.join(root,'locations');await mkdir(dir,{recursive:true});
- const temporary=path.join(dir,privateIpKey(ip)+'-'+randomUUID()+'.tmp');
- await writeFile(temporary,body,{mode:0o600});await rename(temporary,path.join(dir,name));
+ if(activityDatabaseConfigured())return saveDatabaseLocation(ip,'location',snapshot);
+ return writeLocal('locations/'+privateIpKey(ip),{at:new Date().toISOString(),snapshot});
 }
-/** Five login attempts per IP per ten minutes; storage claims remain valid across serverless instances. */export async function claimAdminAttempt(ip:string){
- const bucket=Math.floor(Date.now()/600000),fingerprint=privateIpKey(ip);
- for(let slot=0;slot<5;slot++){
-  const key=`activity/access/${bucket}/${fingerprint}-${slot}`;
-  try{
-   if(cloud())await put(key,'1',{access:'private',addRandomSuffix:false,allowOverwrite:false});
-   else{const dir=path.join(root,'access',String(bucket));await mkdir(dir,{recursive:true});const handle=await open(path.join(dir,fingerprint+'-'+slot),'wx',0o600);await handle.close()}
-   return true;
-  }catch(error){if((error as NodeJS.ErrnoException).code==='EEXIST'||conflicts(error))continue;throw error}
- }
+export async function claimAdminAttempt(ip:string){
+ if(activityDatabaseConfigured())return claimDatabaseAttempt(ip,'login',5);
+ localOnly();const bucket=Math.floor(Date.now()/600000),directory=path.join(root,'access',String(bucket));await mkdir(directory,{recursive:true});
+ for(let slot=0;slot<5;slot++)try{const handle=await open(path.join(directory,privateIpKey(ip)+'-'+slot),'wx',0o600);await handle.close();return true}
+ catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error}
  return false;
 }

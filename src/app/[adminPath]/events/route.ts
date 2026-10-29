@@ -1,47 +1,27 @@
 import {NextRequest,NextResponse} from 'next/server';
 import {ADMIN_COOKIE,adminPathMatches,verifyAdminSession} from '@/lib/activity-crypto';
-import {readActivityReport,readIpLocation,readVerifiedDistrict} from '@/lib/activity-store';
-import {isActivitySite,type ActivityEvent} from '@/lib/activity-types';
+import {readActivityReport,claimReportAttempt} from '@/lib/activity-store';
+import {requestAddress} from '@/lib/activity-location';
+import {decodeActivityCursor} from '@/lib/activity-db';
+import {readActivityArchive,validateArchiveRequest} from '@/lib/activity-archive';
+import {isActivitySite} from '@/lib/activity-types';
 export const runtime='nodejs';
 export const maxDuration=30;
 export const dynamic='force-dynamic';
-const LOCATION_KEYS=['country','city','district','location','districtSource','districtConfidence','districtEvidence','locationNote','isp','asn','networkType','networkRisk'] as const;
-/**
- * One address must not read differently from one minute to the next. Older records keep the
- * answer that was stored with them, so every row for an IP is aligned to the answer that
- * address resolves to now.
- */
-async function alignLocations(events:ActivityEvent[]){
- const ips=[...new Set(events.map(event=>event.ip).filter(ip=>ip&&ip!=='확인 불가'&&ip!=='127.0.0.1'))].slice(0,50);
- if(!ips.length)return events;
- const latest=new Map<string,ActivityEvent>();
- for(const event of events)if(!latest.has(event.ip))latest.set(event.ip,event);
- const aligned=new Map<string,Record<string,unknown>>();
- await Promise.all(ips.map(async ip=>{
-  const [verified,remembered]=await Promise.all([readVerifiedDistrict(ip),readIpLocation(ip)]);
-  if(verified){aligned.set(ip,{country:'KR',city:'서울특별시',district:verified,location:`서울특별시 ${verified}`,districtSource:'verified',districtConfidence:'high',districtEvidence:`브라우저 위치 확인 ${verified}`,locationNote:''});return}
-  if(remembered){aligned.set(ip,remembered);return}
-  // Nothing stored yet: trust the newest record for that address, which was resolved with
-  // the current rules, so older rows cannot contradict it.
-  const newest=latest.get(ip);
-  if(newest)aligned.set(ip,newest as unknown as Record<string,unknown>);
- }));
- if(!aligned.size)return events;
- return events.map(event=>{
-  const value=aligned.get(event.ip);
-  if(!value)return event;
-  const patch:Record<string,unknown>={};
-  for(const key of LOCATION_KEYS)if(value[key]!==undefined)patch[key]=value[key];
-  return {...event,...patch};
- });
-}
+const headers={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','X-Robots-Tag':'noindex, nofollow'};
 export async function GET(request:NextRequest,{params}:{params:Promise<{adminPath:string}>}){
  const {adminPath}=await params;if(!adminPathMatches(adminPath))return new Response(null,{status:404});
- const headers={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','X-Robots-Tag':'noindex, nofollow'};
  if(!verifyAdminSession(request.cookies.get(ADMIN_COOKIE)?.value))return NextResponse.json({error:'로그인이 필요합니다.'},{status:401,headers});
+ const query=request.nextUrl.searchParams,site=query.get('site')||'law',days=Number(query.get('days')||1),cursor=query.get('cursor');
+ const source=query.get('source')||'database',date=query.get('date')||'';
+ let page;
  try{
-  const site=request.nextUrl.searchParams.get('site');
-  const report=await readActivityReport(Number(request.nextUrl.searchParams.get('days')||1),isActivitySite(site)?site:'law');
-  return NextResponse.json({...report,events:await alignLocations(report.events)},{headers});
- }catch{console.warn('[private-admin] Activity storage read failed');return NextResponse.json({error:'기록을 불러오지 못했습니다. 다시 시도해주세요.'},{status:503,headers})}
+  if(!isActivitySite(site)||![1,7,30].includes(days)||!['database','archive'].includes(source))throw new Error();
+  if(source==='archive')validateArchiveRequest(date,cursor);else page=decodeActivityCursor(cursor);
+ }catch{return NextResponse.json({error:'조회 조건이 올바르지 않습니다.'},{status:400,headers})}
+ try{
+  if(!await claimReportAttempt(requestAddress(request.headers).ip))return NextResponse.json({error:'조회 요청이 많습니다. 잠시 후 다시 시도해주세요.'},{status:429,headers:{...headers,'Retry-After':'60'}});
+  const report=source==='archive'?await readActivityArchive(date,site,cursor):await readActivityReport(days,site,page||null);
+  return NextResponse.json(report,{headers});
+ }catch{console.warn('[private-admin] Activity storage read failed');return NextResponse.json({error:'기록을 불러오지 못했습니다. 과거 기록은 페이지당 1MB 이내에서만 조회합니다.'},{status:503,headers})}
 }

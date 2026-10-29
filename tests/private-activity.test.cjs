@@ -175,102 +175,6 @@ test('a failing or disabled district lookup still records the visitor',async()=>
  const erroring=load('activity-location',{},{},{fetch:async()=>({ok:false,json:async()=>null})});
  assert.equal((await erroring.activityLocation(header)).district,'');
 });
-function fakeStore(){
- const entries=new Map();let revision=0;
- class Conflict extends Error{}
- return {entries,api:{BlobPreconditionFailedError:Conflict,BlobNotFoundError:class extends Error{},list:async({prefix})=>({blobs:[...entries.keys()].filter(pathname=>pathname.startsWith(prefix)).map(pathname=>({pathname,uploadedAt:new Date()})),hasMore:false}),get:async key=>{
-  const entry=entries.get(key);if(!entry)return null;
-  return {statusCode:200,blob:{etag:entry.etag},stream:new Response(entry.body).body};
- },put:async(key,body,options)=>{
-  assert.equal(options.access,'private');const old=entries.get(key);
-  if(options.ifMatch&&options.ifMatch!==old?.etag)throw new Conflict('precondition');
-  if(!options.ifMatch&&options.allowOverwrite===false&&old)throw new Error('already exists');
-  entries.set(key,{body,etag:String(++revision)});return {};
- }}};
-}
-
-test('tab switches reuse immutable event reads and still include newly appended events',async()=>{
- const store=fakeStore(),cipher=load('activity-crypto'),original=store.api.get;
- let reads=0;
- store.api.get=async key=>{if(key.startsWith('activity/overflow/'))reads++;return original(key)};
- const api=load('activity-store',{'@vercel/blob':store.api,'./activity-crypto':cipher});
- const base={at:new Date().toISOString(),ip:'203.0.113.1',action:'visit',detail:'/',city:'',district:'',country:'',location:'지역 확인 불가'};
- await api.appendActivity({...base,id:'cached-law'});
- await api.appendActivity({...base,id:'cached-map',site:'mapforyou'});
- await Promise.all([api.readActivityReport(1,'law'),api.readActivityReport(1,'mapforyou')]);
- assert.equal(reads,2,'concurrent reports share each event read');
- await api.readActivityReport(1,'portfolio');assert.equal(reads,2);
- await api.appendActivity({...base,id:'new-map',site:'mapforyou'});
- assert.equal((await api.readActivityReport(1,'mapforyou')).total,2);
- assert.equal(reads,3,'only the new immutable event needs another read');
-});
-test('one IP keeps the same location across instances for a day',async()=>{
- const store=fakeStore(),cipher=load('activity-crypto');
- const modules={'@vercel/blob':store.api,'./activity-crypto':cipher,'node:fs/promises':new Proxy({}, {get:()=>()=>{throw Error('Unexpected filesystem access')}})};
- const first=load('activity-store',modules),second=load('activity-store',modules);
- assert.equal(await first.readIpLocation('112.187.136.60'),null);
- const snapshot={country:'KR',city:'서울특별시',district:'광진구',location:'서울특별시 광진구',districtSource:'geo-city',districtConfidence:'medium',districtEvidence:'IP DB ip.sb 광진구',locationNote:'',isp:'Korea Telecom',asn:'AS4766',networkType:'일반 회선',networkRisk:''};
- await first.saveIpLocation('112.187.136.60',snapshot);
- const remembered=await second.readIpLocation('112.187.136.60');
- assert.equal(remembered.district,'광진구');
- assert.equal(remembered.location,'서울특별시 광진구');
- assert(![...store.entries.values()].some(value=>value.body.includes('광진구')),'the cached location is encrypted at rest');
- assert.equal(await second.readIpLocation('112.187.136.61'),null);
-});
-test('parallel serverless writers preserve all events; reports and rate limits share durable storage',async()=>{
- const store=fakeStore(),cipher=load('activity-crypto');
- const modules={'@vercel/blob':store.api,'./activity-crypto':cipher,'node:fs/promises':new Proxy({}, {get:()=>()=>{throw Error('Unexpected filesystem access')}})};
- const first=load('activity-store',modules),second=load('activity-store',modules);
- await Promise.all(Array.from({length:20},(_,i)=>(i%2?first:second).appendActivity({id:String(i),at:new Date().toISOString(),ip:'203.0.113.'+(i%2+1),action:i%2?'query':'visit',detail:'safe test question',city:'',district:'',country:'',location:'지역 확인 불가'})));
- const report=await first.readActivityReport(1);assert.equal(report.total,20);assert.equal(report.visits,10);assert.equal(report.queries,10);assert.equal(report.uniqueIps,2);
- assert(![...store.entries.values()].some(value=>value.body.includes('safe test question')));
- for(let i=0;i<5;i++)assert.equal(await (i%2?first:second).claimAdminAttempt('203.0.113.99'),true);
- assert.equal(await first.claimAdminAttempt('203.0.113.99'),false);
-});
-test('cloud ingestion never depends on overwriting a shared journal',async()=>{
- const store=fakeStore(),cipher=load('activity-crypto'),original=store.api.put;
- let journalWrites=0;
- store.api.put=async(key,body,options)=>{if(key.startsWith('activity/days/')){journalWrites++;throw Error('temporary shared journal failure')}return original(key,body,options)};
- const api=load('activity-store',{'@vercel/blob':store.api,'./activity-crypto':cipher});
- const event={id:'immutable-fallback-test',at:new Date().toISOString(),ip:'203.0.113.5',action:'query',detail:'test-only preserved question',city:'',district:'',country:'',location:'지역 확인 불가'};
- await api.appendActivity(event);
- assert.equal(journalWrites,0);
- assert.equal(store.entries.size,1);
- assert([...store.entries.keys()][0].startsWith('activity/overflow/'));
- const report=await api.readActivityReport(1);assert.equal(report.total,1);assert.equal(report.events[0].detail,event.detail);
-});
-test('the portfolio and the law service keep separate reports over one shared store',async()=>{
- const store=fakeStore(),cipher=load('activity-crypto');
- const api=load('activity-store',{'@vercel/blob':store.api,'./activity-crypto':cipher});
- const base={at:new Date().toISOString(),city:'',district:'',country:'',location:'지역 확인 불가'};
- await api.appendActivity({...base,id:'law-visit',ip:'203.0.113.1',action:'visit',detail:'/'});
- await api.appendActivity({...base,id:'law-query',ip:'203.0.113.1',action:'query',detail:'퇴직금 질문'});
- await api.appendActivity({...base,id:'owner-law',ip:'203.0.113.9',district:'광진구',location:'서울특별시 광진구',action:'visit',detail:'/'});
- await api.appendActivity({...base,id:'portfolio-visit',ip:'203.0.113.9',district:'광진구',location:'서울특별시 광진구',site:'portfolio',action:'visit',detail:'/'});
- await api.appendActivity({...base,id:'portfolio-open',ip:'203.0.113.9',district:'광진구',location:'서울특별시 광진구',site:'portfolio',action:'view_step',detail:'프로젝트: LAW PROJECT'});
- const law=await api.readActivityReport(1);assert.equal(law.site,'law');assert.equal(law.total,3);
- assert.deepEqual(law.events.map(event=>event.id).sort().join(','),'law-query,law-visit,owner-law');
- assert.equal(law.queries,1);assert.equal(law.views,0);assert.equal(law.uniqueIps,2);
- const portfolio=await api.readActivityReport(1,'portfolio');assert.equal(portfolio.site,'portfolio');assert.equal(portfolio.total,2);
- assert.deepEqual(portfolio.events.map(event=>event.id).sort().join(','),'portfolio-open,portfolio-visit');
- assert.equal(portfolio.visits,1);assert.equal(portfolio.views,1);assert.equal(portfolio.queries,0);assert.equal(portfolio.uniqueIps,1);
- assert.equal(law.selfIp,'203.0.113.9','the busiest home-district IP is flagged');
- assert.equal(portfolio.selfIp,'203.0.113.9','both tabs flag the same IP, even when the portfolio alone never saw it twice');
-});
-test('the map gets its own tab without borrowing the other two reports',async()=>{
- const store=fakeStore(),cipher=load('activity-crypto');
- const api=load('activity-store',{'@vercel/blob':store.api,'./activity-crypto':cipher});
- const base={at:new Date().toISOString(),city:'',district:'',country:'',location:'지역 확인 불가'};
- await api.appendActivity({...base,id:'map-visit',ip:'203.0.113.4',site:'mapforyou',action:'visit',detail:'/'});
- await api.appendActivity({...base,id:'map-query',ip:'203.0.113.4',site:'mapforyou',action:'query',detail:'우동 · 홍대 · 카페 · 12곳'});
- await api.appendActivity({...base,id:'map-open',ip:'203.0.113.5',site:'mapforyou',action:'view_step',detail:'가게: 스탠다드브레드'});
- await api.appendActivity({...base,id:'law-visit',ip:'203.0.113.4',action:'visit',detail:'/'});
- const map=await api.readActivityReport(1,'mapforyou');
- assert.equal(map.site,'mapforyou');assert.equal(map.total,3);assert.equal(map.visits,1);assert.equal(map.queries,1);assert.equal(map.views,1);assert.equal(map.uniqueIps,2);
- assert.equal(map.events.map(event=>event.id).sort().join(','),'map-open,map-query,map-visit');
- assert.equal((await api.readActivityReport(1,'law')).total,1,'the law tab keeps only law records');
- assert.equal((await api.readActivityReport(1,'portfolio')).total,0);
-});
 test('only the tracked sites own origins may post their records',()=>{
  const {portfolioOriginAllowed,mapforyouOriginAllowed}=load('site-origin');
  for(const origin of ['https://leopark-portfolio.vercel.app','https://leopark-portfolio-cpr3hd10a-flow4works-projects.vercel.app','http://localhost:3200','http://127.0.0.1:3200'])assert.equal(portfolioOriginAllowed(origin),true,origin);
@@ -297,22 +201,6 @@ test('the map relay endpoint only accepts its own origin and forwards the visito
  assert.equal(seen[0].headers.get('x-vercel-ip-city'),'Seoul');
  assert.equal(seen[0].headers.has('x-visitor-ip'),false,'relayed fields are renamed before the store sees them');
  assert.equal(seen[0].body,JSON.stringify({action:'visit',detail:'/'}));
-});
-
-test('the scout gets its own tab without touching the other reports',async()=>{
- const store=fakeStore(),cipher=load('activity-crypto');
- const api=load('activity-store',{'@vercel/blob':store.api,'./activity-crypto':cipher});
- const base={at:new Date().toISOString(),city:'',district:'',country:'',location:'지역 확인 불가'};
- await api.appendActivity({...base,id:'scout-visit',ip:'203.0.113.6',site:'scout',action:'visit',detail:'/'});
- await api.appendActivity({...base,id:'scout-visit-again',ip:'203.0.113.6',site:'scout',action:'visit',detail:'/index.html'});
- await api.appendActivity({...base,id:'scout-query',ip:'203.0.113.7',site:'scout',action:'query',detail:'AI 대화'});
- await api.appendActivity({...base,id:'law-visit',ip:'203.0.113.6',action:'visit',detail:'/'});
- const scout=await api.readActivityReport(1,'scout');
- assert.equal(scout.site,'scout');assert.equal(scout.total,3);assert.equal(scout.visits,2);assert.equal(scout.queries,1);assert.equal(scout.views,0);assert.equal(scout.uniqueIps,2);
- assert.equal(scout.events.map(event=>event.id).sort().join(','),'scout-query,scout-visit,scout-visit-again');
- assert.equal((await api.readActivityReport(1,'law')).total,1,'the law tab keeps only law records');
- assert.equal((await api.readActivityReport(1,'portfolio')).total,0);
- assert.equal((await api.readActivityReport(1,'mapforyou')).total,0);
 });
 
 test('only the scout own origins may post scout records',()=>{

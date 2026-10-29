@@ -6,9 +6,11 @@
     "dev": "next dev --hostname 127.0.0.1 --port 3700",
     "build": "next build",
     "start": "next start --hostname 127.0.0.1 --port 3700",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node tests/run-unit.cjs"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.2.0",
     "@vercel/blob": "^2.8.2",
     "@xyflow/react": "^12.12.0",
     "lucide-react": "^0.468.0",
@@ -17,6 +19,7 @@
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.13",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
