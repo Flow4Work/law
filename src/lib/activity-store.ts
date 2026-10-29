@@ -9,6 +9,22 @@ const cloud=()=>process.env.VERCEL==='1';
 const root=path.join(process.cwd(),'data','private-activity');
 const day=(at=Date.now())=>new Date(at+9*60*60*1000).toISOString().slice(0,10);
 type Journal={events:ActivityEvent[];limited?:boolean};
+// Overflow objects are immutable. Reuse bounded reads across tabs and concurrent requests.
+const eventReads=new Map<string,{expires:number;value:Promise<Journal>}>();
+function readEventJournal(key:string):Promise<Journal>{
+ const cached=eventReads.get(key);
+ if(cached&&cached.expires>Date.now())return cached.value;
+ const value=(async()=>{
+  const result=await get(key,{access:'private',useCache:false});
+  if(!result||result.statusCode!==200)throw new Error('Activity event unavailable');
+  return decryptActivity<Journal>(await new Response(result.stream).text());
+ })();
+ const entry={expires:Date.now()+600000,value};
+ eventReads.delete(key);eventReads.set(key,entry);
+ while(eventReads.size>2000)eventReads.delete(eventReads.keys().next().value!);
+ void value.catch(()=>{if(eventReads.get(key)===entry)eventReads.delete(key)});
+ return value;
+}
 const conflicts=(error:unknown)=>error instanceof BlobPreconditionFailedError||/already exists|precondition|412|409/i.test(error&&typeof error==='object'&&'message' in error?String(error.message):'');
 async function readJournal(key:string):Promise<{value:Journal;etag?:string}>{
  if(!cloud()){try{return {value:decryptActivity<Journal>(await readFile(path.join(root,key+'.enc'),'utf8'))}}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return {value:{events:[]}};throw error}}
@@ -57,7 +73,7 @@ export async function readActivityReport(days:number,site:ActivitySite='law'):Pr
   if(cloud()){const result=await list({prefix:'activity/overflow/'+key+'/',limit:1000});overflow.push(...result.blobs);overflowLimited||=result.hasMore}
  }));
  const candidates=overflow.sort((a,b)=>new Date(b.uploadedAt).getTime()-new Date(a.uploadedAt).getTime()).slice(0,1000);
- for(let start=0;start<candidates.length;start+=16)journals.push(...await Promise.all(candidates.slice(start,start+16).map(async blob=>{const result=await get(blob.pathname,{access:'private',useCache:false});return result?.statusCode===200?decryptActivity<Journal>(await new Response(result.stream).text()):{events:[]}})));
+ for(let start=0;start<candidates.length;start+=16)journals.push(...await Promise.all(candidates.slice(start,start+16).map(blob=>readEventJournal(blob.pathname))));
  const unique=Array.from(new Map(journals.flatMap(value=>value.events||[]).map(event=>[event.id,event])).values());
  // The owner is guessed once, across every tab, so both views mark the same network.
  const selfIp=ownerIpOf(unique);

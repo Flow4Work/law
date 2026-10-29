@@ -18,9 +18,8 @@ async function alignLocations(events:ActivityEvent[]){
  for(const event of events)if(!latest.has(event.ip))latest.set(event.ip,event);
  const aligned=new Map<string,Record<string,unknown>>();
  await Promise.all(ips.map(async ip=>{
-  const verified=await readVerifiedDistrict(ip);
+  const [verified,remembered]=await Promise.all([readVerifiedDistrict(ip),readIpLocation(ip)]);
   if(verified){aligned.set(ip,{country:'KR',city:'서울특별시',district:verified,location:`서울특별시 ${verified}`,districtSource:'verified',districtConfidence:'high',districtEvidence:`브라우저 위치 확인 ${verified}`,locationNote:''});return}
-  const remembered=await readIpLocation(ip);
   if(remembered){aligned.set(ip,remembered);return}
   // Nothing stored yet: trust the newest record for that address, which was resolved with
   // the current rules, so older rows cannot contradict it.

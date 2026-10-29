@@ -188,6 +188,22 @@ function fakeStore(){
   entries.set(key,{body,etag:String(++revision)});return {};
  }}};
 }
+
+test('tab switches reuse immutable event reads and still include newly appended events',async()=>{
+ const store=fakeStore(),cipher=load('activity-crypto'),original=store.api.get;
+ let reads=0;
+ store.api.get=async key=>{if(key.startsWith('activity/overflow/'))reads++;return original(key)};
+ const api=load('activity-store',{'@vercel/blob':store.api,'./activity-crypto':cipher});
+ const base={at:new Date().toISOString(),ip:'203.0.113.1',action:'visit',detail:'/',city:'',district:'',country:'',location:'지역 확인 불가'};
+ await api.appendActivity({...base,id:'cached-law'});
+ await api.appendActivity({...base,id:'cached-map',site:'mapforyou'});
+ await Promise.all([api.readActivityReport(1,'law'),api.readActivityReport(1,'mapforyou')]);
+ assert.equal(reads,2,'concurrent reports share each event read');
+ await api.readActivityReport(1,'portfolio');assert.equal(reads,2);
+ await api.appendActivity({...base,id:'new-map',site:'mapforyou'});
+ assert.equal((await api.readActivityReport(1,'mapforyou')).total,2);
+ assert.equal(reads,3,'only the new immutable event needs another read');
+});
 test('one IP keeps the same location across instances for a day',async()=>{
  const store=fakeStore(),cipher=load('activity-crypto');
  const modules={'@vercel/blob':store.api,'./activity-crypto':cipher,'node:fs/promises':new Proxy({}, {get:()=>()=>{throw Error('Unexpected filesystem access')}})};
