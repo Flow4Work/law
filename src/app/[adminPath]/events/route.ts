@@ -32,7 +32,7 @@ async function report(request:NextRequest,{params}:{params:Promise<{adminPath:st
  try{
   if(!await claimReportAttempt(requestAddress(request.headers).ip))return NextResponse.json({error:'조회 요청이 많습니다. 잠시 후 다시 시도해주세요.'},{status:429,headers:{...headers,'Retry-After':'60'}});
   const result=source==='archive'?await readActivityArchive(date,site,cursor):await readActivityReport(days,site,page||null,{search,action,location,newest:order==='newest'});
-  return NextResponse.json(result,{headers});
+  return NextResponse.json({...result,viewerIp:requestAddress(request.headers).ip},{headers});
  }catch{console.warn('[private-admin] Activity storage read failed');return NextResponse.json({error:source==='archive'?'과거 기록을 불러오지 못했습니다. 안전 조회 한도는 페이지당 1MB입니다.':'신규 기록 DB를 조회하지 못했습니다. 잠시 후 조회 새로고침을 눌러주세요.'},{status:503,headers})}
 }
 export const GET=report;
