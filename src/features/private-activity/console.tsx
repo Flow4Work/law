@@ -45,13 +45,14 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
  const cursor=cursors[cursors.length-1];
  const [verifying,setVerifying]=useState(false),[verified,setVerified]=useState('');
  const activeRequest=useRef<AbortController|null>(null);
+ const lastRead=useRef(0);
  const endpoint=(suffix:string)=>window.location.pathname.replace(/\/$/,'')+suffix;
  const load=useCallback(async()=>{
   activeRequest.current?.abort();
   if(source==='archive'&&!archiveAvailable){activeRequest.current=null;setBusy(false);setReport(null);setError('');return}
   const controller=new AbortController();activeRequest.current=controller;
   const timeout=setTimeout(()=>controller.abort(),25000);
-  setBusy(true);setError('');
+  lastRead.current=Date.now();setBusy(true);setError('');
   try{const query=activityViewQuery({days,site,source,date:archiveDate,search:'',action,location:locationFilter,newest});if(cursor)query.set('cursor',cursor);const response=await fetch(window.location.pathname.replace(/\/$/,'')+'/events?'+query,{cache:'no-store',signal:controller.signal,...(appliedSearch&&source==='database'?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({search:appliedSearch})}:{})});const data=await response.json();if(activeRequest.current!==controller)return;if(response.status===401){setAuthenticated(false);setReport(null);return}if(!response.ok)throw new Error(data.error||'기록을 불러오지 못했습니다.');if(data.site!==site||data.days!==days)throw new Error('기록을 다시 불러와주세요.');setReport(data)}
   catch(error){if(activeRequest.current===controller)setError(controller.signal.aborted?'응답이 지연되고 있습니다. 새로고침해주세요.':error instanceof Error?error.message:'기록을 불러오지 못했습니다.')}
   finally{clearTimeout(timeout);if(activeRequest.current===controller){activeRequest.current=null;setBusy(false)}}
@@ -64,6 +65,13 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
  },[days,site,source,archiveDate,action,locationFilter,newest]);
  useEffect(()=>{const restore=()=>{const view=parseActivityView(new URLSearchParams(window.location.search));resetPage();setSite(view.site);setDays(view.days);setSource(view.source);setArchiveDate(view.date);setAction(view.action);setLocationFilter(view.location);setNewest(view.newest);setSearch('');setAppliedSearch('')};window.addEventListener('popstate',restore);return()=>window.removeEventListener('popstate',restore)},[]);
  useEffect(()=>{if(authenticated)void load();return()=>{activeRequest.current?.abort();activeRequest.current=null}},[authenticated,load]);
+ useEffect(()=>{
+  // Refresh when the owner returns from a tracked site, without background polling.
+  if(!authenticated||source!=='database')return;
+  const refresh=()=>{if(document.visibilityState==='visible'&&!activeRequest.current&&Date.now()-lastRead.current>=15000)void load()};
+  window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',refresh);
+  return()=>{window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',refresh)};
+ },[authenticated,source,load]);
  const login=async(event:React.FormEvent)=>{
   event.preventDefault();if(busy)return;setBusy(true);setError('');
   try{const response=await fetch(endpoint('/access'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password})});const data=await response.json();if(!response.ok)throw new Error(data.error||'로그인하지 못했습니다.');setPassword('');setAuthenticated(true)}

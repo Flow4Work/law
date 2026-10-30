@@ -85,6 +85,21 @@ test('admin reload preserves validated view settings without putting private sea
  const invalid=view.parseActivityView(new URLSearchParams('site=other&days=999&action=invalid&location=invalid&order=sql'));
  assert.equal(invalid.site,'law');assert.equal(invalid.days,1);assert.equal(invalid.action,'all');assert.equal(invalid.location,'all');assert.equal(invalid.newest,true);
 });
+
+test('portfolio relay authenticates visitor headers, rejects forgery/expiry and keeps original IP',async()=>{
+ const key='isolated-portfolio-relay-test-key-at-least-32-characters';
+ const relay=loader({}, {LEGAL_PORTFOLIO_RELAY_SECRET:key})('src/lib/portfolio-relay.ts');
+ const event={id:crypto.randomUUID(),visitorId:crypto.randomUUID(),action:'visit',page:'/law-project',detail:'/law-project'};
+ const body=JSON.stringify({event,visitor:{'x-vercel-forwarded-for':'203.0.113.8','x-vercel-ip-country':'KR','x-vercel-ip-city':'Gangnam-gu','cookie':'never-forwarded'}});
+ const stamp=String(Date.now());const sign=(at,raw)=>crypto.createHmac('sha256',key).update(at+'\n'+raw).digest('hex');
+ const req=(raw=body,at=stamp,signature=sign(at,raw))=>new Request('https://qa.example/api/portfolio-activity',{method:'POST',headers:{'x-law-relay-time':at,'x-law-relay-signature':signature},body:raw});
+ const decoded=await relay.decodePortfolioRelay(req());assert(decoded);
+ assert.equal(decoded.headers.get('x-vercel-forwarded-for'),'203.0.113.8');assert.equal(decoded.headers.get('cookie'),null);assert.equal((await decoded.json()).page,'/law-project');
+ assert.equal(await relay.decodePortfolioRelay(req(body+' ',stamp,sign(stamp,body))),null);
+ assert.equal(await relay.decodePortfolioRelay(req(body,String(Date.now()-120000))),null);
+ assert.equal(await relay.decodePortfolioRelay(req(body,stamp,'f'.repeat(64))),null);
+ assert.equal(await relay.decodePortfolioRelay(req('x'.repeat(4001))),null);
+});
 test('archive preflights byte limits, bounds downloads, caches immutable records and never writes',async()=>{
  let gets=0,lists=0,writes=0,size=100;let cipher;
  const event={id:'old',at:new Date().toISOString(),ip:'203.0.113.8',site:'law',action:'visit',country:'KR',city:'',district:'',location:'',detail:'preserved historical question'};
