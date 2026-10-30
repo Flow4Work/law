@@ -44,7 +44,46 @@ test('dedicated Postgres persists encrypted events, deduplicates IDs and paginat
   assert.equal(blobCalls,0);
   await db.close();db=new PGlite(directory);assert.equal((await store.readActivityReport(1,'law')).total,122);
   assert.throws(()=>database.decodeActivityCursor('bad'),/Invalid cursor/);
+  // A filter must reach records beyond the first page; totals remain period-wide.
+  const filters={search:'',action:'query',location:'all',newest:true};
+  const queryPage=await store.readActivityReport(1,'law',null,filters);
+  assert.equal(queryPage.total,122);assert.equal(queryPage.events.length,50);assert(queryPage.events.every(e=>e.action==='query'));
+  const queryEnd=await store.readActivityReport(1,'law',database.decodeActivityCursor(queryPage.nextCursor),filters);
+  assert.equal(queryEnd.events.length,11);assert.equal(queryEnd.nextCursor,null);
+  const oldest=await store.readActivityReport(1,'law',null,{...filters,action:'all',newest:false});
+  assert.equal(oldest.events[0].id,'00000');assert.equal(oldest.events[49].id,'00049');
+  const oldNext=await store.readActivityReport(1,'law',database.decodeActivityCursor(oldest.nextCursor),{...filters,action:'all',newest:false});
+  assert.equal(oldNext.events[0].id,'00050');
+  const sparse=Array.from({length:210},(_,i)=>({...base,id:'sparse-'+i,at:new Date(Date.now()+i-300000).toISOString(),detail:i===0?'only older encrypted needle':'unrelated',districtConfidence:i===0?'high':'low'}));
+  await Promise.all(sparse.map(e=>store.appendActivity(e)));
+  const needle={...filters,action:'all',search:'encrypted needle'};
+  let part=await store.readActivityReport(1,'law',null,needle),seen=[];
+  assert.equal(part.scanned,200);assert.equal(part.events.length,0);assert.equal(part.searchLimited,true);assert(part.nextCursor);
+  seen.push(...part.events);
+  part=await store.readActivityReport(1,'law',database.decodeActivityCursor(part.nextCursor),needle);seen.push(...part.events);
+  assert.equal(seen.length,1);assert.equal(seen[0].id,'sparse-0');assert.equal(part.nextCursor,null);
+  const high=await store.readActivityReport(1,'law',database.decodeActivityCursor((await store.readActivityReport(1,'law',null,{...needle,search:'',location:'high'})).nextCursor),{...needle,search:'',location:'high'});
+  assert.equal(high.events[0].districtConfidence,'high');assert.equal(blobCalls,0);
+  const route=load('src/app/[adminPath]/events/route.ts'),{NextRequest}=require('next/server');
+  const auth=load('src/lib/activity-crypto.ts'),cookie=auth.ADMIN_COOKIE+'='+auth.createAdminSession();
+  const url='https://qa.example/'+adminPath+'/events?site=law&days=1';
+  const context={params:Promise.resolve({adminPath})};
+  const response=await route.POST(new NextRequest(url,{method:'POST',headers:{cookie,origin:'https://qa.example','content-type':'application/json'},body:JSON.stringify({search:'encrypted needle'})}),context);
+  assert.equal(response.status,200);assert.equal((await response.json()).searchLimited,true);
+  assert.equal((await route.POST(new NextRequest(url,{method:'POST',headers:{cookie,origin:'https://bad.example'},body:'{"search":"test"}'}),context)).status,403);
+  assert.equal((await route.GET(new NextRequest(url+'&source=archive&date=2026-10-28',{headers:{cookie}}),context)).status,409);
+  assert.equal((await route.GET(new NextRequest(url+'&action=invalid',{headers:{cookie}}),context)).status,400);assert.equal(blobCalls,0);
  }finally{await db.close()}
+});
+
+test('admin reload preserves validated view settings without putting private search text in URLs',()=>{
+ const view=loader()('src/lib/activity-view.ts');
+ const parsed=view.parseActivityView(new URLSearchParams('site=portfolio&days=30&action=query&location=high&order=oldest'));
+ const query=view.activityViewQuery({...parsed,search:'private hypothetical question'});
+ const restored=view.parseActivityView(query);
+ assert.equal(restored.site,'portfolio');assert.equal(restored.days,30);assert.equal(restored.action,'query');assert.equal(restored.location,'high');assert.equal(restored.newest,false);assert(!query.toString().includes('question'));
+ const invalid=view.parseActivityView(new URLSearchParams('site=other&days=999&action=invalid&location=invalid&order=sql'));
+ assert.equal(invalid.site,'law');assert.equal(invalid.days,1);assert.equal(invalid.action,'all');assert.equal(invalid.location,'all');assert.equal(invalid.newest,true);
 });
 test('archive preflights byte limits, bounds downloads, caches immutable records and never writes',async()=>{
  let gets=0,lists=0,writes=0,size=100;let cipher;

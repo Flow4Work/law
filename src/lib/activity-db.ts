@@ -2,6 +2,7 @@ import 'server-only';
 import {neon} from '@neondatabase/serverless';
 import {decryptActivity,encryptActivity,privateIpKey} from './activity-crypto';
 import type {ActivityEvent,ActivityReport,ActivitySite,ActivityLocationSnapshot} from './activity-types';
+import {activityMatches,defaultActivityFilters,type ActivityFilters} from './activity-view';
 
 export const activityDatabaseConfigured=()=>!!process.env.LEGAL_ACTIVITY_DATABASE_URL;
 // A LAW-specific variable prevents accidentally using another application's database.
@@ -26,27 +27,36 @@ export function decodeActivityCursor(value:string|null):ActivityPage|null{
   return {at:parsed.at,id:parsed.id};
  }catch{throw new Error('Invalid cursor')}
 }
-export async function readDatabaseReport(days:number,site:ActivitySite,cursor:ActivityPage|null=null):Promise<ActivityReport>{
+export async function readDatabaseReport(days:number,site:ActivitySite,cursor:ActivityPage|null=null,filters:ActivityFilters=defaultActivityFilters):Promise<ActivityReport>{
  const start=new Date();start.setUTCHours(15,0,0,0);
  if(start.getTime()>Date.now())start.setUTCDate(start.getUTCDate()-1);
  start.setUTCDate(start.getUTCDate()-(days-1));
- // Aggregates scan indexed metadata in Postgres; only 51 encrypted records leave the DB.
+ // Metadata aggregates stay in Postgres. Text/accuracy filters decrypt a bounded window,
+ // never the entire period. A continuation cursor also covers windows with no matches.
+ const scanLimit=filters.search||['high','medium','low'].includes(filters.location)?200:50;
+ const direction=filters.newest?'DESC':'ASC',comparison=filters.newest?'<':'>';
  const rows=await database().query(`WITH selected AS (
- SELECT * FROM law_activity.events WHERE site=$1 AND at>=$2 AND at<=$3
+ SELECT id,at,action,ip_key,visitor_key,country,district FROM law_activity.events WHERE site=$1 AND at>=$2 AND at<=$3
  ), stats AS (SELECT count(*)::int total,count(*) FILTER(WHERE action='visit')::int visits,
  count(*) FILTER(WHERE action='query')::int queries,count(*) FILTER(WHERE action='view_step')::int views,
  count(DISTINCT ip_key) FILTER(WHERE ip_key<>$6)::int "uniqueIps",count(DISTINCT visitor_key)::int visitors FROM selected),
  regions AS (SELECT country,district,count(*)::int total FROM selected GROUP BY country,district),
- owner AS (SELECT (array_agg(payload ORDER BY at DESC))[1] payload FROM law_activity.events
- WHERE at>=$2 AND at<=$3 AND district='광진구' AND ip_key NOT IN ($6,$7) GROUP BY ip_key ORDER BY count(*) DESC,max(at) DESC LIMIT 1),
- page AS (SELECT at,id,payload FROM selected WHERE $4::timestamptz IS NULL OR (at,id)<($4::timestamptz,$5::text)
- ORDER BY at DESC,id DESC LIMIT 51)
- SELECT row_to_json(stats) stats,(SELECT payload FROM owner) owner,COALESCE((SELECT json_agg(regions) FROM regions),'[]'::json) regions,
- COALESCE((SELECT json_agg(page ORDER BY at DESC,id DESC) FROM page),'[]'::json) records FROM stats`,
- [site,start.toISOString(),new Date().toISOString(),cursor?.at||null,cursor?.id||null,privateIpKey('확인 불가'),privateIpKey('127.0.0.1')]);
+ owner_key AS (SELECT ip_key FROM law_activity.events WHERE at>=$2 AND at<=$3 AND district='광진구' AND ip_key NOT IN ($6,$7)
+ GROUP BY ip_key ORDER BY count(*) DESC,max(at) DESC LIMIT 1),
+ owner AS (SELECT payload FROM law_activity.events WHERE ip_key=(SELECT ip_key FROM owner_key) AND at>=$2 AND at<=$3 ORDER BY at DESC,id DESC LIMIT 1),
+ page AS (SELECT at,id,payload FROM law_activity.events WHERE site=$1 AND at>=$2 AND at<=$3
+ AND ($4::timestamptz IS NULL OR (at,id)${comparison}($4::timestamptz,$5::text))
+ AND ($8='all' OR action=$8) AND ($9 NOT IN ('district','missing') OR ($9='district' AND district<>'') OR ($9='missing' AND district=''))
+ ORDER BY at ${direction},id ${direction} LIMIT $10)
+ SELECT row_to_json(stats) stats,(SELECT payload FROM owner) owner,(SELECT min(at) FROM law_activity.events WHERE site=$1) "recordedFrom",
+ COALESCE((SELECT json_agg(regions ORDER BY total DESC,country,district) FROM regions),'[]'::json) regions,
+ COALESCE((SELECT json_agg(page ORDER BY at ${direction},id ${direction}) FROM page),'[]'::json) records FROM stats`,
+ [site,start.toISOString(),new Date().toISOString(),cursor?.at||null,cursor?.id||null,privateIpKey('확인 불가'),privateIpKey('127.0.0.1'),filters.action,filters.location,scanLimit+1]);
  const result=rows[0],records=result.records as {at:string;id:string;payload:string}[];
- const hasMore=records.length>50,page=records.slice(0,50),last=page.at(-1);
- return {...result.stats,regions:result.regions,selfIp:result.owner?decryptActivity<ActivityEvent>(result.owner).ip:'',events:page.map(row=>decryptActivity<ActivityEvent>(row.payload)),
+ const events:ActivityEvent[]=[];let scanned=0,last:typeof records[number]|undefined;
+ for(const row of records.slice(0,scanLimit)){scanned++;last=row;const event=decryptActivity<ActivityEvent>(row.payload);if(activityMatches(event,filters))events.push(event);if(events.length===50)break}
+ const hasMore=records.length>scanned;
+ return {...result.stats,regions:result.regions,recordedFrom:result.recordedFrom,selfIp:result.owner?decryptActivity<ActivityEvent>(result.owner).ip:'',events,scanned,searchLimited:hasMore&&events.length<50,
   days,site,generatedAt:new Date().toISOString(),limited:hasMore,source:'database',statisticsScope:'period',
   nextCursor:hasMore&&last?Buffer.from(JSON.stringify({at:last.at,id:last.id})).toString('base64url'):null};
 }

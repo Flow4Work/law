@@ -5,6 +5,7 @@ import {randomUUID} from 'node:crypto';
 import {decryptActivity,encryptActivity,privateIpKey} from './activity-crypto';
 import type {ActivityEvent,ActivityReport,ActivityLocationSnapshot,ActivitySite} from './activity-types';
 import {activityDatabaseConfigured,appendDatabaseActivity,readDatabaseReport,readDatabaseLocation,saveDatabaseLocation,claimDatabaseAttempt,type ActivityPage} from './activity-db';
+import {activityMatches,defaultActivityFilters,type ActivityFilters} from './activity-view';
 const root=path.join(process.cwd(),'data','private-activity');
 const day=(at=Date.now())=>new Date(at+9*3600000).toISOString().slice(0,10);
 function localOnly(){if(process.env.VERCEL==='1')throw new Error('LAW activity database is required in production')}
@@ -31,12 +32,13 @@ export async function appendActivity(event:ActivityEvent){
   if(!journal.events.some(saved=>saved.id===event.id)){journal.events.push(event);await writeLocal(key,journal)}
  });queue=task.catch(()=>{});return task;
 }
-export async function readActivityReport(days:number,site:ActivitySite='law',cursor:ActivityPage|null=null):Promise<ActivityReport>{
- if(activityDatabaseConfigured())return readDatabaseReport(days,site,cursor);
+export async function readActivityReport(days:number,site:ActivitySite='law',cursor:ActivityPage|null=null,filters:ActivityFilters=defaultActivityFilters):Promise<ActivityReport>{
+ if(activityDatabaseConfigured())return readDatabaseReport(days,site,cursor,filters);
  localOnly();const all:ActivityEvent[]=[];
  for(let offset=0;offset<days;offset++)all.push(...(await readLocal<{events:ActivityEvent[]}>(day(Date.now()-offset*86400000)))?.events||[]);
  const events=all.filter(event=>(event.site||'law')===site).sort((a,b)=>b.at.localeCompare(a.at)||b.id.localeCompare(a.id));
- const page=events.filter(event=>!cursor||event.at<cursor.at||event.at===cursor.at&&event.id<cursor.id).slice(0,51),last=page[49];
+ const ordered=filters.newest?events:[...events].reverse();
+ const page=ordered.filter(event=>(!cursor||(filters.newest?event.at<cursor.at||event.at===cursor.at&&event.id<cursor.id:event.at>cursor.at||event.at===cursor.at&&event.id>cursor.id))&&activityMatches(event,filters)).slice(0,51),last=page[49];
  return {events:page.slice(0,50),total:events.length,visits:events.filter(e=>e.action==='visit').length,queries:events.filter(e=>e.action==='query').length,
   views:events.filter(e=>e.action==='view_step').length,uniqueIps:new Set(events.map(e=>e.ip)).size,visitors:new Set(events.map(e=>e.visitorId||e.ip)).size,
   days,site,generatedAt:new Date().toISOString(),limited:page.length>50,source:'database',statisticsScope:'period',
