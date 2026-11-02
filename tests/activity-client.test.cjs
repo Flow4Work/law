@@ -1,7 +1,7 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript'),crypto=require('node:crypto');
 function client(statuses=[204],options={}){
  const sent=[],timers=[],stored=new Map([['law-visitor-v1',options.saved||'broken-old-id']]),warnings=[];
- const exports={},window={location:{pathname:options.pathname||'/',search:options.search||''}};
+ const exports={},window={location:{pathname:options.pathname||'/',search:options.search||'',hostname:options.hostname||'law-lake-theta.vercel.app'}};
  const source=ts.transpileModule(fs.readFileSync(path.join(__dirname,'../src/lib/activity-client.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
  vm.runInNewContext(source,{exports,window,crypto:options.fallback?{getRandomValues:crypto.getRandomValues.bind(crypto)}:crypto,Uint8Array,AbortController,URLSearchParams,console:{warn:m=>warnings.push(m)},
   localStorage:{getItem:k=>{if(options.storageBlocked)throw Error();return stored.get(k)},setItem:(k,v)=>stored.set(k,v)},
@@ -23,7 +23,7 @@ test('LAW does not retry rejected or throttled events or log question contents',
 });
 test('LAW repairs invalid IDs, supports blocked storage and older UUID APIs, and excludes admin/showcases',async()=>{
  for(const options of [{},{storageBlocked:true},{fallback:true}]){const c=client([204],options);c.recordActivity('visit');c.recordActivity('settings');await flush();const events=c.sent.map(r=>JSON.parse(r.body));assert.match(events[0].visitorId,/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i);assert.equal(events[0].visitorId,events[1].visitorId);assert.notEqual(events[0].id,events[1].id);assert.equal(c.stored.size,1)}
- for(const options of [{pathname:'/inspect-private'},{search:'?showcase=1'}]){const c=client([204],options);c.recordActivity('visit');assert.equal(c.sent.length,0)}
+ for(const options of [{pathname:'/inspect-private'},{search:'?showcase=1'},{hostname:'law-preview-example.vercel.app'}]){const c=client([204],options);c.recordActivity('visit');assert.equal(c.sent.length,0)}
 });
 test('LAW records a visit when entering home from the admin route without duplicate strict effects',()=>{
  let pathname='/inspect-private',ref={current:''},effects=[],last=[],visits=0;

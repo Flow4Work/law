@@ -29,5 +29,6 @@ async function send(body:string){
 }
 export function recordActivity(action:ActivityAction,detail=''){
  if(typeof window==='undefined'||window.location.pathname!=='/'||new URLSearchParams(window.location.search).has('showcase'))return;
+ if(window.location.hostname.endsWith('.vercel.app')&&window.location.hostname!=='law-lake-theta.vercel.app')return;
  try{void send(JSON.stringify({id:uuid(),visitorId:visitor(),page:window.location.pathname,action,detail:detail.trim().slice(0,400)}))}catch{console.warn('[law] 활동 기록을 준비하지 못했습니다.')}
 }
