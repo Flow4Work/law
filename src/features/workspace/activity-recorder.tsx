@@ -1,10 +1,13 @@
 'use client';
 import {useEffect,useRef} from 'react';
+import {usePathname} from 'next/navigation';
 import {recordActivity} from '@/lib/activity-client';
 export function ActivityRecorder(){
- const mounted=useRef(false);
+ const pathname=usePathname(),recordedPath=useRef('');
  useEffect(()=>{
-  if(!mounted.current){mounted.current=true;recordActivity('visit')}
+  if(recordedPath.current!==pathname){recordedPath.current=pathname;if(pathname==='/')recordActivity('visit')}
+ },[pathname]);
+ useEffect(()=>{
   const click=(event:MouseEvent)=>{
    const target=event.target instanceof Element?event.target.closest('button'):null;
    const label=target?.getAttribute('aria-label')||'';
