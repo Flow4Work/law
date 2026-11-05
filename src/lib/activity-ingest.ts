@@ -13,6 +13,8 @@ export async function ingestActivity(request:Request,site:ActivitySite){
  const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
  if(body.id!==undefined&&(typeof body.id!=='string'||!uuid.test(body.id)))return new Response(null,{status:400});
  if(body.visitorId!==undefined&&(typeof body.visitorId!=='string'||!uuid.test(body.visitorId)))return new Response(null,{status:400});
+ // Timestamp receipt before database/geolocation waits, rather than their completion.
+ const receivedAt=new Date().toISOString();
  const ip=requestAddress(request.headers).ip;
  const now=Date.now();
  const limit=recent.get(ip);if(limit&&now-limit.start<60000){if(limit.count>=60)return new Response(null,{status:429});limit.count++}else recent.set(ip,{start:now,count:1});
@@ -22,7 +24,7 @@ export async function ingestActivity(request:Request,site:ActivitySite){
  const verified=await readVerifiedDistrict(ip);
  const remembered=verified?null:await readIpLocation(ip);
  const location=await activityLocation(request.headers,verified,remembered||undefined);
- const event={id:body.id||randomUUID(),visitorId:body.visitorId,page:typeof body.page==='string'&&body.page.startsWith('/')?body.page.split(/[?#]/)[0].slice(0,200):'/',at:new Date().toISOString(),...location,site,action:body.action as ActivityAction,detail:typeof body.detail==='string'?body.detail.trim().slice(0,400):''};
+ const event={id:body.id||randomUUID(),visitorId:body.visitorId,page:typeof body.page==='string'&&body.page.startsWith('/')?body.page.split(/[?#]/)[0].slice(0,200):'/',at:receivedAt,...location,site,action:body.action as ActivityAction,detail:typeof body.detail==='string'?body.detail.trim().slice(0,400):''};
  try{await appendActivity(event)}catch{console.warn('[private-activity] Storage write failed');return new Response(null,{status:503,headers:{'Cache-Control':'no-store'}})}
  if(!verified&&!remembered&&(location.district||location.isp)){
   try{await saveIpLocation(ip,location)}catch{/* a failed cache write must never lose the record */}
