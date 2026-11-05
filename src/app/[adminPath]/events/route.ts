@@ -1,4 +1,5 @@
 import {NextRequest,NextResponse} from 'next/server';
+import {createHash} from 'node:crypto';
 import {ADMIN_COOKIE,adminPathMatches,verifyAdminSession} from '@/lib/activity-crypto';
 import {readActivityReport,claimReportAttempt} from '@/lib/activity-store';
 import {requestAddress} from '@/lib/activity-location';
@@ -32,7 +33,13 @@ async function report(request:NextRequest,{params}:{params:Promise<{adminPath:st
  try{
   if(!await claimReportAttempt(requestAddress(request.headers).ip))return NextResponse.json({error:'조회 요청이 많습니다. 잠시 후 다시 시도해주세요.'},{status:429,headers:{...headers,'Retry-After':'60'}});
   const result=source==='archive'?await readActivityArchive(date,site,cursor):await readActivityReport(days,site,page||null,{search,action,location,newest:order==='newest'});
-  return NextResponse.json({...result,viewerIp:requestAddress(request.headers).ip},{headers});
+  const value={...result,viewerIp:requestAddress(request.headers).ip};
+  // The response changes only when the records/statistics change, not on every clock tick.
+  const {generatedAt,...stable}=value;
+  const etag='"'+createHash('sha256').update(JSON.stringify(stable)).digest('base64url')+'"';
+  const responseHeaders={...headers,ETag:etag,'X-Activity-Checked-At':generatedAt};
+  if(source==='database'&&request.headers.get('if-none-match')===etag)return new Response(null,{status:304,headers:responseHeaders});
+  return NextResponse.json(value,{headers:responseHeaders});
  }catch{console.warn('[private-admin] Activity storage read failed');return NextResponse.json({error:source==='archive'?'과거 기록을 불러오지 못했습니다. 안전 조회 한도는 페이지당 1MB입니다.':'신규 기록 DB를 조회하지 못했습니다. 잠시 후 조회 새로고침을 눌러주세요.'},{status:503,headers})}
 }
 export const GET=report;

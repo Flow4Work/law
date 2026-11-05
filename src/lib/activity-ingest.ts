@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {ACTIVITY_LABELS,type ActivityAction,type ActivitySite} from './activity-types';
 import {activityLocation,requestAddress} from './activity-location';
 import {appendActivity,readIpLocation,readVerifiedDistrict,saveIpLocation} from './activity-store';
-import {activityDatabaseConfigured,claimDatabaseAttempt} from './activity-db';
+import {activityDatabaseConfigured,prepareDatabaseActivity} from './activity-db';
 /** One shared pipeline for every tracked site, so location and privacy rules never diverge. */
 const recent=new Map<string,{start:number;count:number}>();
 export async function ingestActivity(request:Request,site:ActivitySite){
@@ -15,16 +15,19 @@ export async function ingestActivity(request:Request,site:ActivitySite){
  if(body.visitorId!==undefined&&(typeof body.visitorId!=='string'||!uuid.test(body.visitorId)))return new Response(null,{status:400});
  // Timestamp receipt before database/geolocation waits, rather than their completion.
  const receivedAt=new Date().toISOString();
+ const eventId=body.id||randomUUID();
  const ip=requestAddress(request.headers).ip;
  const now=Date.now();
  const limit=recent.get(ip);if(limit&&now-limit.start<60000){if(limit.count>=60)return new Response(null,{status:429});limit.count++}else recent.set(ip,{start:now,count:1});
  while(recent.size>1000)recent.delete(recent.keys().next().value!);
  try{
- if(activityDatabaseConfigured()&&!await claimDatabaseAttempt(ip,'event',60))return new Response(null,{status:429,headers:{'Retry-After':'60'}});
- const verified=await readVerifiedDistrict(ip);
- const remembered=verified?null:await readIpLocation(ip);
+ const prepared=activityDatabaseConfigured()?await prepareDatabaseActivity(ip,eventId):null;
+ if(prepared&&!prepared.allowed)return new Response(null,{status:429,headers:{'Retry-After':'60'}});
+ if(prepared?.recorded)return new Response(null,{status:204,headers:{'Cache-Control':'no-store'}});
+ const verified=prepared?prepared.verified:await readVerifiedDistrict(ip);
+ const remembered=verified?null:prepared?prepared.location:await readIpLocation(ip);
  const location=await activityLocation(request.headers,verified,remembered||undefined);
- const event={id:body.id||randomUUID(),visitorId:body.visitorId,page:typeof body.page==='string'&&body.page.startsWith('/')?body.page.split(/[?#]/)[0].slice(0,200):'/',at:receivedAt,...location,site,action:body.action as ActivityAction,detail:typeof body.detail==='string'?body.detail.trim().slice(0,400):''};
+ const event={id:eventId,visitorId:body.visitorId,page:typeof body.page==='string'&&body.page.startsWith('/')?body.page.split(/[?#]/)[0].slice(0,200):'/',at:receivedAt,...location,site,action:body.action as ActivityAction,detail:typeof body.detail==='string'?body.detail.trim().slice(0,400):''};
  try{await appendActivity(event)}catch{console.warn('[private-activity] Storage write failed');return new Response(null,{status:503,headers:{'Cache-Control':'no-store'}})}
  if(!verified&&!remembered&&(location.district||location.isp)){
   try{await saveIpLocation(ip,location)}catch{/* a failed cache write must never lose the record */}

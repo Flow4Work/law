@@ -73,6 +73,12 @@ test('dedicated Postgres persists encrypted events, deduplicates IDs and paginat
   assert.equal((await route.POST(new NextRequest(url,{method:'POST',headers:{cookie,origin:'https://bad.example'},body:'{"search":"test"}'}),context)).status,403);
   assert.equal((await route.GET(new NextRequest(url+'&source=archive&date=2026-10-28',{headers:{cookie}}),context)).status,409);
   assert.equal((await route.GET(new NextRequest(url+'&action=invalid',{headers:{cookie}}),context)).status,400);assert.equal(blobCalls,0);
+  const latest=await route.GET(new NextRequest(url,{headers:{cookie}}),context);assert.equal(latest.status,200);
+  const etag=latest.headers.get('etag');assert(etag);
+  const unchanged=await route.GET(new NextRequest(url,{headers:{cookie,'if-none-match':etag}}),context);
+  assert.equal(unchanged.status,304);assert.equal(await unchanged.text(),'');assert(unchanged.headers.get('x-activity-checked-at'));
+  const changed=await route.GET(new NextRequest(url+'&action=query',{headers:{cookie,'if-none-match':etag}}),context);assert.equal(changed.status,200);
+  const unauthorized=await route.GET(new NextRequest(url,{headers:{'if-none-match':etag}}),context);assert.equal(unauthorized.status,401);
  }finally{await db.close()}
 });
 
@@ -84,6 +90,23 @@ test('admin reload preserves validated view settings without putting private sea
  assert.equal(restored.site,'portfolio');assert.equal(restored.days,30);assert.equal(restored.action,'query');assert.equal(restored.location,'high');assert.equal(restored.newest,false);assert(!query.toString().includes('question'));
  const invalid=view.parseActivityView(new URLSearchParams('site=other&days=999&action=invalid&location=invalid&order=sql'));
  assert.equal(invalid.site,'law');assert.equal(invalid.days,1);assert.equal(invalid.action,'all');assert.equal(invalid.location,'all');assert.equal(invalid.newest,true);
+});
+
+test('ingestion uses two DB calls with cached location, one for duplicates, and preserves global rate limits',async()=>{
+ const db=new PGlite();await db.exec(fs.readFileSync(path.join(root,'migrations/001-private-activity.sql'),'utf8'));let queries=0;
+ const load=loader({'@neondatabase/serverless':{neon:()=>({query:async(sql,args)=>{queries++;return (await db.query(sql,args)).rows}})}});
+ const store=load('src/lib/activity-store.ts'),database=load('src/lib/activity-db.ts'),ingest=load('src/lib/activity-ingest.ts');
+ const ip='203.0.113.27',snapshot={country:'KR',city:'서울특별시',district:'광진구',location:'서울특별시 광진구',districtSource:'verified',districtConfidence:'high',districtEvidence:'test',locationNote:'',isp:'test',asn:'',networkType:'',networkRisk:''};
+ try{
+  await store.saveIpLocation(ip,snapshot);queries=0;
+  const id=crypto.randomUUID(),send=()=>ingest.ingestActivity(new Request('https://qa.example/api/activity',{method:'POST',headers:{'x-vercel-forwarded-for':ip},body:JSON.stringify({id,action:'visit'})}),'portfolio');
+  assert.equal((await send()).status,204);assert.equal(queries,2);
+  assert.equal((await send()).status,204);assert.equal(queries,3);
+  const event=(await store.readActivityReport(1,'portfolio')).events[0];assert.equal(event.district,'광진구');
+  await store.saveVerifiedDistrict(ip,'성동구');const prepared=await database.prepareDatabaseActivity(ip,crypto.randomUUID());assert.equal(prepared.verified,'성동구');
+  for(let i=0;i<60;i++)await database.prepareDatabaseActivity('different-ip',crypto.randomUUID());
+  assert.equal((await database.prepareDatabaseActivity('different-ip',crypto.randomUUID())).allowed,false);
+ }finally{await db.close()}
 });
 
 test('portfolio relay authenticates visitor headers, rejects forgery/expiry and keeps original IP',async()=>{

@@ -3,6 +3,7 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import {Activity,ArrowDown,ArrowUp,Briefcase,Clock3,Globe2,KeyRound,LoaderCircle,LogOut,Map as MapIcon,MapPin,RefreshCw,Scale,Search,ShieldCheck,Users} from 'lucide-react';
 import {ACTIVITY_LABELS,ACTIVITY_SITES,type ActivityReport,type ActivityAction,type ActivityConfidence,type ActivityEvent,type ActivitySite} from '@/lib/activity-types';
 import './console.css';
+import {watchActivityRefresh,type ActivityRefreshState} from '@/lib/activity-refresh';
 import {activityMatches,activityViewQuery,parseActivityView,PC_IP,MOBILE_IP,activityDeviceLabel,type ActivityView} from '@/lib/activity-view';
 /** Portfolio, Scout, MapForYou, then Law: one console, one tracking pipeline per site. */
 const SITE_ORDER:ActivitySite[]=['portfolio','scout','mapforyou','law'];
@@ -47,6 +48,8 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
  const lastRead=useRef(0);
  const retryAfter=useRef(0);
  const [autoRefresh,setAutoRefresh]=useState(true);
+ const [refreshState,setRefreshState]=useState<ActivityRefreshState>('live');
+ const lastResponse=useRef<{key:string;etag:string;report:ActivityReport}|null>(null);
  const endpoint=(suffix:string)=>window.location.pathname.replace(/\/$/,'')+suffix;
  const load=useCallback(async()=>{
   activeRequest.current?.abort();
@@ -54,11 +57,26 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
   const controller=new AbortController();activeRequest.current=controller;
   const timeout=setTimeout(()=>controller.abort(),25000);
   lastRead.current=Date.now();setBusy(true);setError('');
-  try{const query=activityViewQuery({days,site,source,date:archiveDate,search:'',action,location:locationFilter,newest});if(cursor)query.set('cursor',cursor);const response=await fetch(window.location.pathname.replace(/\/$/,'')+'/events?'+query,{cache:'no-store',signal:controller.signal,...(appliedSearch&&source==='database'?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({search:appliedSearch})}:{})});const data=await response.json();if(activeRequest.current!==controller)return;if(response.status===401){setAuthenticated(false);setReport(null);return}if(!response.ok){retryAfter.current=Date.now()+(response.status===429?Math.max(5,Number(response.headers.get('Retry-After'))||60):15)*1000;throw new Error(data.error||'기록을 불러오지 못했습니다.')}if(data.site!==site||data.days!==days)throw new Error('기록을 다시 불러와주세요.');retryAfter.current=0;setReport(data)}
+  try{
+   const query=activityViewQuery({days,site,source,date:archiveDate,search:'',action,location:locationFilter,newest});if(cursor)query.set('cursor',cursor);
+   const requestKey=query.toString()+'|'+appliedSearch;
+   const saved=source==='database'&&lastResponse.current?.key===requestKey?lastResponse.current:null;
+   const requestHeaders:Record<string,string>=saved?{'If-None-Match':saved.etag}:{};
+   if(appliedSearch&&source==='database')requestHeaders['Content-Type']='application/json';
+   const response=await fetch(window.location.pathname.replace(/\/$/,'')+'/events?'+query,{cache:'no-store',signal:controller.signal,headers:requestHeaders,...(appliedSearch&&source==='database'?{method:'POST',body:JSON.stringify({search:appliedSearch})}:{})});
+   if(activeRequest.current!==controller)return;
+   if(response.status===304&&saved){const current={...saved.report,generatedAt:response.headers.get('X-Activity-Checked-At')||saved.report.generatedAt};lastResponse.current={...saved,report:current};retryAfter.current=0;setReport(current);return}
+   const data=await response.json();
+   if(activeRequest.current!==controller)return;
+   if(response.status===401){lastResponse.current=null;setAuthenticated(false);setReport(null);return}
+   if(!response.ok){retryAfter.current=Date.now()+(response.status===429?Math.max(5,Number(response.headers.get('Retry-After'))||60):15)*1000;throw new Error(data.error||'기록을 불러오지 못했습니다.')}
+   if(data.site!==site||data.days!==days)throw new Error('기록을 다시 불러와주세요.');
+   const etag=response.headers.get('ETag');lastResponse.current=source==='database'&&etag?{key:requestKey,etag,report:data}:null;retryAfter.current=0;setReport(data);
+  }
   catch(error){if(activeRequest.current===controller)setError(controller.signal.aborted?'응답이 지연되고 있습니다. 새로고침해주세요.':error instanceof Error?error.message:'기록을 불러오지 못했습니다.')}
   finally{clearTimeout(timeout);if(activeRequest.current===controller){activeRequest.current=null;setBusy(false)}}
  },[days,site,source,archiveDate,cursor,action,locationFilter,newest,appliedSearch,archiveAvailable]);
- const resetPage=()=>{activeRequest.current?.abort();activeRequest.current=null;setCursors([null]);setReport(null)};
+ const resetPage=()=>{activeRequest.current?.abort();activeRequest.current=null;lastResponse.current=null;setCursors([null]);setReport(null)};
  const switchSite=(next:ActivitySite)=>{if(next===site)return;resetPage();setSite(next);setSearch('');setAppliedSearch('');setAction('all');setLocationFilter('all')};
  useEffect(()=>{
   const query=activityViewQuery({days,site,source,date:archiveDate,search:'',action,location:locationFilter,newest});
@@ -70,9 +88,7 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
   // Keep current records live, without moving an older page while it is being read.
   if(!authenticated||source!=='database'||!autoRefresh||cursor||!newest)return;
   const refresh=()=>{if(document.visibilityState==='visible'&&!activeRequest.current&&Date.now()>=retryAfter.current&&Date.now()-lastRead.current>=1000)void load()};
-  const timer=window.setInterval(refresh,5000);
-  window.addEventListener('focus',refresh);window.addEventListener('online',refresh);document.addEventListener('visibilitychange',refresh);
-  return()=>{window.clearInterval(timer);window.removeEventListener('focus',refresh);window.removeEventListener('online',refresh);document.removeEventListener('visibilitychange',refresh)};
+  return watchActivityRefresh(refresh,setRefreshState);
  },[authenticated,source,autoRefresh,cursor,newest,load]);
  const login=async(event:React.FormEvent)=>{
   event.preventDefault();if(busy)return;setBusy(true);setError('');
@@ -80,7 +96,7 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
   catch(error){setError(error instanceof Error?error.message:'로그인하지 못했습니다.')}
   finally{setBusy(false)}
  };
- const logout=async()=>{setBusy(true);try{const response=await fetch(endpoint('/access'),{method:'DELETE'});if(!response.ok)throw new Error();setAuthenticated(false);setReport(null);setError('')}catch{setError('로그아웃하지 못했습니다. 다시 시도해주세요.')}finally{setBusy(false)}};
+ const logout=async()=>{setBusy(true);try{const response=await fetch(endpoint('/access'),{method:'DELETE'});if(!response.ok)throw new Error();lastResponse.current=null;setAuthenticated(false);setReport(null);setError('')}catch{setError('로그아웃하지 못했습니다. 다시 시도해주세요.')}finally{setBusy(false)}};
  const verify=async()=>{
   if(verifying)return;setVerifying(true);setError('');setVerified('');
   try{
@@ -106,7 +122,7 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
  return <main className="private-activity"><div className="private-wrap">
   <header className="private-header"><div><div className="private-kicker"><span/>PRIVATE WORKSPACE</div><h1>{siteInfo.title}</h1><p>{siteInfo.description} <a className="private-site-link" href={siteInfo.url} target="_blank" rel="noreferrer">{siteInfo.host} ↗</a></p></div><div className="private-actions"><button className="private-button" onClick={verify} disabled={verifying||busy} title="이 브라우저의 실제 위치로 구를 한 번 확인하면, 이 IP의 기록이 정확해집니다.">{verifying?<LoaderCircle className="private-spin" size={16}/>:<MapPin size={16}/>}내 위치로 구 확인</button><button className="private-button" onClick={logout} disabled={busy}><LogOut size={16}/>로그아웃</button></div></header>
   <nav className="private-tabs" role="tablist" aria-label="추적할 사이트">{SITE_ORDER.map(key=>{const info=SITE_META[key],Icon=info.icon;return <button key={key} id={'private-tab-'+key} role="tab" aria-selected={site===key} aria-controls="private-panel" className={'private-tab'+(site===key?' private-tab-active':'')} onClick={()=>switchSite(key)}><Icon size={16}/><span>{info.label}</span><small>{info.host}</small></button>})}</nav>
-  {source==='database'&&<div className="private-self-note private-live-status"><label><input type="checkbox" checked={autoRefresh} onChange={event=>setAutoRefresh(event.target.checked)}/>자동 업데이트</label><strong>{!autoRefresh?'자동 업데이트 꺼짐':cursor||!newest?'이전 기록 조회 중 · 자동 업데이트 일시 중지':'5초마다 새 기록 확인'}</strong><span>{error?'최근 조회 실패 · 표시된 기록은 마지막 성공 기준':busy?'새 기록 확인 중':report?'마지막 확인 '+dateTime(report.generatedAt):'첫 기록 확인 중'} · 한국 시간</span></div>}
+  {source==='database'&&<div className="private-self-note private-live-status"><label><input type="checkbox" checked={autoRefresh} onChange={event=>setAutoRefresh(event.target.checked)}/>자동 업데이트</label><strong>{!autoRefresh?'자동 업데이트 꺼짐':cursor||!newest?'이전 기록 조회 중 · 자동 업데이트 일시 중지':refreshState==='idle'?'5분 이상 활동 없음 · 자동 업데이트 대기':refreshState==='offline'?'인터넷 연결 대기':'30초마다 새 기록 확인'}</strong><span>{error?'최근 조회 실패 · 표시된 기록은 마지막 성공 기준':busy?'새 기록 확인 중':report?'마지막 확인 '+dateTime(report.generatedAt):'첫 기록 확인 중'} · 한국 시간</span></div>}
   {(site==='portfolio'||site==='law')&&<p className="private-self-note">Portfolio의 Law Map 카드는 프로젝트 소개(/law-project)를 엽니다. 소개 조회·서비스 보기 클릭은 Portfolio에, 실제 법률 서비스 접속은 Law에 기록됩니다. 소개만 조회하면 Law 접속 수는 늘지 않습니다.</p>}
   {verified&&<p className="private-verified" role="status"><MapPin size={15}/>이 브라우저 위치를 {verified}(으)로 확인했습니다. 이 IP의 기록은 정확도 높음으로 표시됩니다.</p>}
   <div className="private-summary">{[{label:'서비스 접속',value:report?.visits,icon:Globe2},{label:siteInfo.queryLabel,value:site==='portfolio'?report?.views:report?.queries,icon:Search},{label:'고유 방문자',value:report?.visitors,icon:Users},{label:'고유 IP',value:report?.uniqueIps,icon:ShieldCheck},{label:'전체 활동',value:report?.total,icon:Activity}].map(({label,value,icon:Icon})=><section key={label}><span>{label}<Icon size={17}/></span><strong>{number(value)}</strong><small>{source==='archive'?'과거 기록 · 이 페이지':days===1?'오늘 전체 · 한국 시간':`최근 ${days}일 전체`}</small></section>)}</div>

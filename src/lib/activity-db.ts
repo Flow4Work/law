@@ -5,6 +5,16 @@ import type {ActivityEvent,ActivityReport,ActivitySite,ActivityLocationSnapshot}
 import {activityMatches,defaultActivityFilters,type ActivityFilters} from './activity-view';
 
 export const activityDatabaseConfigured=()=>!!process.env.LEGAL_ACTIVITY_DATABASE_URL;
+/** One round trip for the global event allowance, idempotency and both location caches. */
+export async function prepareDatabaseActivity(ip:string,eventId:string){
+ const rows=await database().query(`SELECT law_activity.allow_request($1,$2,60) allowed,
+ EXISTS(SELECT 1 FROM law_activity.events WHERE id=$4) recorded,
+ (SELECT payload FROM law_activity.locations WHERE key=$3 AND kind='verified' AND (expires IS NULL OR expires>now())) verified,
+ (SELECT payload FROM law_activity.locations WHERE key=$3 AND kind='location' AND (expires IS NULL OR expires>now())) location`,
+ ['event|'+privateIpKey(ip),Math.floor(Date.now()/60000)*60,privateIpKey(ip),eventId]);
+ const row=rows[0];
+ return {allowed:row?.allowed===true,recorded:row?.recorded===true,verified:row?.verified?decryptActivity<string>(row.verified):'',location:row?.location?decryptActivity<ActivityLocationSnapshot>(row.location):null};
+}
 // A LAW-specific variable prevents accidentally using another application's database.
 function database(){
  const url=process.env.LEGAL_ACTIVITY_DATABASE_URL;
