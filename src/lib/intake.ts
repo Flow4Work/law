@@ -1,4 +1,5 @@
 import type {LegalAnswer,LegalCase,RoadmapEdge,RoadmapNode} from './types';
+import type {ApiLocale} from './locale-instructions';
 
 export const MAX_INTAKE_ROUTES=8; // Safety ceiling, never a target or a fixed number of choices.
 export type IntakeQuestion={question:string;choices:string[];why?:string};
@@ -28,7 +29,13 @@ const q=(question:string,choices:string[],why:string):IntakeQuestion=>({question
 
 // Used only as an operational fallback when no AI answer is available.
 // This never replaces the primary, legally informed model interview.
-function recoveryQuestion(story:string,plan?:IntakePlan):IntakeQuestion{
+function recoveryQuestion(story:string,plan?:IntakePlan,locale:ApiLocale='ko'):IntakeQuestion{
+ if(locale==='en'){
+  const index=plan?.answers.length||0;
+  return index===0?q('What steps, if any, have you already taken to address this issue?',['No formal steps yet','A claim or official procedure is underway','I have a formal notice or decision'],'Your current stage can change the available options.')
+   :index===1?q('What key amount, date, or decision is involved?',[],'Exact amounts and dates can affect the next steps.')
+   :q('What official notices, agreements, or other evidence do you have?',[],'The documents available can change which steps apply.');
+ }
  const text=story+' '+(plan?.answers||[]).map(a=>a.choice+' '+a.detail).join(' ');
  const asked=(plan?.questions||[]).map(x=>x.question).join(' ');
  const choices=(question:string,values:string[],why:string)=>q(question,values,why);
@@ -82,7 +89,13 @@ function questionTopic(value:string):string{
  if(/노동청|진정|소송|법원|판결|공식.{0,4}절차|고소|신고|어디까지진행|시작한적/.test(t))return 'procedure-stage';
  return 'other:'+t.slice(0,18);
 }
-function fallbackRoutes(story:string,prior?:IntakePlan):IntakeRoute[]{
+function fallbackRoutes(story:string,prior?:IntakePlan,locale:ApiLocale='ko'):IntakeRoute[]{
+ if(locale==='en'){if(prior?.routes?.length)return prior.routes;
+  if(/wage|salary|severance|employment|unpaid pay/i.test(story))return [{title:'Confirm unpaid amounts',description:'Separate any payments already received from amounts still owed.'},{title:'Explore recovery options',description:'Compare the formal steps available at your current stage.'}];
+  if(/deposit|landlord|lease|tenant|housing/i.test(story))return [{title:'Check your lease status',description:'Review how the lease ended and what repayment is due.'},{title:'Explore deposit recovery',description:'Look at steps that may protect your rights and help recover the deposit.'}];
+  if(/police|criminal|prosecutor|investigation|complaint/i.test(story))return [{title:'Confirm the case stage',description:'Check your legal position and any official notice.'},{title:'Review response options',description:'Explore which actions are available at this stage.'}];
+  return [{title:'Check the current stage',description:'Identify the relevant legal conditions and any prior actions.'},{title:'Review possible options',description:'Explore steps supported by the facts available so far.'}];
+ }
  if(prior?.routes?.length)return prior.routes;
  if(/임금|급여|월급|퇴사|퇴직금|체불/.test(story)){
   return /판결|강제집행|압류/.test(story)?[
@@ -104,7 +117,7 @@ function fallbackRoutes(story:string,prior?:IntakePlan):IntakeRoute[]{
  return [{title:'권리와 사건 단계 확인',description:'현재 적용되는 법적 요건을 구별해요.'},{title:'가능한 대응 검토',description:'확인된 사실에 맞는 절차를 좁혀가요.'}];
 }
 
-export function normalizeIntake(raw:unknown,original:string,prior?:IntakePlan):IntakePlan{
+export function normalizeIntake(raw:unknown,original:string,prior?:IntakePlan,locale:ApiLocale='ko'):IntakePlan{
  const obj=raw&&typeof raw==='object'?raw as Record<string,unknown>:{};
  const previous: IntakePlan|undefined=prior;
  const questions=[...(previous?.questions||[])];
@@ -112,9 +125,9 @@ export function normalizeIntake(raw:unknown,original:string,prior?:IntakePlan):I
  const existing=new Set(questions.map(item=>item.question.replace(/\s+/g,'')));
  const qraw=obj.question&&typeof obj.question==='object'?obj.question as Record<string,unknown>:null;
  let nextQuestion=qraw&&str(qraw.question,230)?{
-  question:str(qraw.question,155),
+  question:str(qraw.question,locale==='en'?240:155),
   choices:list(qraw.choices,3).slice(0,3),
-  why:str(qraw.why,100)
+  why:str(qraw.why,locale==='en'?220:100)
  }:null;
  if(nextQuestion&&nextQuestion.choices.length!==3)nextQuestion.choices=[];
  // Exact dates, amounts and loosely bounded time ranges are better entered directly.
@@ -126,9 +139,9 @@ export function normalizeIntake(raw:unknown,original:string,prior?:IntakePlan):I
  }
  const shouldComplete=answers.length>=3||(answers.length>=2&&obj.done===true);
  if(!shouldComplete&&questions.length<3){
-  questions.push(nextQuestion||recoveryQuestion(original,previous));
+  questions.push(nextQuestion||recoveryQuestion(original,previous,locale));
  }
- if(!questions.length)questions.push(recoveryQuestion(original));
+ if(!questions.length)questions.push(recoveryQuestion(original,undefined,locale));
  const rawRoutes=Array.isArray(obj.routes)?obj.routes:[];
  const policeOnly=/불송치/.test(original)&&!/불기소/.test(original);
  const enforced=/승소|판결|강제집행|압류/.test(original);
@@ -147,7 +160,7 @@ export function normalizeIntake(raw:unknown,original:string,prior?:IntakePlan):I
  return {
   original:str(original,7000),
   questions:questions.slice(0,3),
-  routes:routes.length?routes:fallbackRoutes(original,previous),
+  routes:routes.length?routes:fallbackRoutes(original,previous,locale),
   answers,
   complete:shouldComplete,
   facts:list(obj.facts,12).length?list(obj.facts,12):previous?.facts||[],
@@ -155,15 +168,15 @@ export function normalizeIntake(raw:unknown,original:string,prior?:IntakePlan):I
  };
 }
 
-export function previewIntake(plan:IntakePlan):Pick<LegalCase,'nodes'|'edges'>{
+export function previewIntake(plan:IntakePlan,locale:ApiLocale='ko'):Pick<LegalCase,'nodes'|'edges'>{
  const root:RoadmapNode={
-  id:'intake-situation',title:'현재 상황',description:plan.original.slice(0,230),status:'current',kind:'situation',
+  id:'intake-situation',title:locale==='en'?'My situation':'현재 상황',description:plan.original.slice(0,230),status:'current',kind:'situation',
   conditions:[],actions:[],documents:[],cost:'',duration:'',risks:[],sourceIds:[],next:[]
  };
  const nodes:RoadmapNode[]=[root,...plan.routes.slice(0,MAX_INTAKE_ROUTES).map((route,index)=>({
   id:'intake-route-'+index,title:route.title,description:route.description,
   status:'verify' as const,kind:'route' as const,
-  conditions:['추가 사실 및 법적 근거 확인 전이에요.'],actions:[],documents:[],cost:'',duration:'',risks:[],sourceIds:[],next:[]
+  conditions:[locale==='en'?'Additional facts and legal grounds still need verification.':'추가 사실 및 법적 근거 확인 전이에요.'],actions:[],documents:[],cost:'',duration:'',risks:[],sourceIds:[],next:[]
  }))];
  const edges:RoadmapEdge[]=nodes.slice(1).map(node=>({source:root.id,target:node.id}));
  root.next=edges.map(edge=>edge.target);
@@ -192,9 +205,9 @@ export function reconcileIntakeResult(result:LegalAnswer,previous?:LegalCase):Le
   edges:result.edges.map(edge=>({...edge,source:mapId(edge.source),target:mapId(edge.target)}))
  };
 }
-export function intakeSummary(plan:IntakePlan):string{
- return '상담에서 확인한 내용:\n'+plan.answers.map((answer,i)=>{
-  const label=plan.questions[i]?.question||'추가로 확인한 사항';
+export function intakeSummary(plan:IntakePlan,locale:ApiLocale='ko'):string{
+ return (locale==='en'?'Details confirmed in this conversation:\n':'상담에서 확인한 내용:\n')+plan.answers.map((answer,i)=>{
+  const label=plan.questions[i]?.question||(locale==='en'?'Additional details':'추가로 확인한 사항');
   return label+'\n'+[answer.choice,answer.detail].filter(Boolean).join(' / ');
  }).join('\n\n');
 }

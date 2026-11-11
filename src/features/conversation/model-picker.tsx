@@ -1,5 +1,6 @@
 'use client';
 
+import {useT} from '@/lib/i18n';
 import {Check,ChevronDown,SlidersHorizontal,Search,Plus} from 'lucide-react';
 import {useEffect,useId,useLayoutEffect,useRef,useState} from 'react';
 import type {ModelInventory} from '@/lib/model-types';
@@ -14,6 +15,7 @@ type Props={
 };
 
 export function ModelPicker({inventory,value,disabled=false,onChange,onManage}:Props){
+ const __t=useT();
   const [open,setOpen]=useState(false);
   const [query,setQuery]=useState('');
   const root=useRef<HTMLDivElement>(null);
@@ -85,25 +87,25 @@ export function ModelPicker({inventory,value,disabled=false,onChange,onManage}:P
     const next=event.key==='Home'?0:event.key==='End'?options.length-1:event.key==='ArrowDown'?(index+1)%options.length:(index-1+options.length)%options.length;
     options[next].focus();
   }}>
-    <button ref={trigger} className="model-picker-trigger" type="button" aria-label={'답변 모델 선택'+(current?.name?': '+current.name:'')} title={current?.name||'답변 모델 선택'} aria-haspopup="dialog" aria-controls={id} aria-expanded={open} disabled={disabled} onClick={()=>setOpen(value=>!value)}>
+    <button ref={trigger} className="model-picker-trigger" type="button" aria-label={__t("답변 모델 선택")+(current?.name?': '+current.name:'')} title={current?.name||__t("답변 모델 선택")} aria-haspopup="dialog" aria-controls={id} aria-expanded={open} disabled={disabled} onClick={()=>setOpen(value=>!value)}>
       <span className="model-picker-label" aria-hidden="true">{shortLabel}</span>
       <ChevronDown className={open?'is-open':''} size={12} aria-hidden="true"/>
     </button>
-    <button className="model-settings-trigger" type="button" aria-label="모델 연결과 관리" title="모델 연결과 관리" disabled={disabled} onClick={onManage}><SlidersHorizontal size={17}/></button>
-    {open&&<div ref={popover} popover="manual" id={id} className="model-picker-popover" role="dialog" aria-label="답변 모델 선택 메뉴">
-      <div className="model-picker-heading">답변 모델</div>
-      <label className="model-picker-search"><Search size={15}/><input ref={search} type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder="모델 검색" aria-label="답변 모델 검색"/></label>
-      <div className="model-picker-options" role="listbox" aria-label="답변 모델 목록">
+    <button className="model-settings-trigger" type="button" aria-label={__t("모델 연결과 관리")} title={__t("모델 연결과 관리")} disabled={disabled} onClick={onManage}><SlidersHorizontal size={17}/></button>
+    {open&&<div ref={popover} popover="manual" id={id} className="model-picker-popover" role="dialog" aria-label={__t("답변 모델 선택 메뉴")}>
+      <div className="model-picker-heading">{__t("답변 모델")}</div>
+      <label className="model-picker-search"><Search size={15}/><input ref={search} type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder={__t("모델 검색")} aria-label={__t("답변 모델 검색")}/></label>
+      <div className="model-picker-options" role="listbox" aria-label={__t("답변 모델 목록")}>
         {groups.map(group=><div key={group} role="group" aria-label={group}><div className="model-picker-group">{group}</div>{filtered.filter(model=>providerName(model.provider)===group).map(model=>{
           const selected=model.id===current?.id;
           return <button key={model.id} type="button" className={'model-picker-option '+(selected?'selected':'')} role="option" aria-selected={selected} disabled={!model.available} onClick={()=>{onChange(model.id);close()}}>
-            <span><strong>{model.name}</strong><small>{model.available?providerName(model.provider):model.reason||providerName(model.provider)+' · 연결 확인 필요'}</small></span>
+            <span><strong>{model.name}</strong><small>{model.available?providerName(model.provider):__t(model.reason||'')||providerName(model.provider)+__t(" · 연결 확인 필요")}</small></span>
             {selected&&<Check size={16}/>}
           </button>;
         })}</div>)}
-        {!filtered.length&&<p className="model-picker-empty">{models.length?'검색 결과가 없어요.':'연결된 모델이 없어요.'}</p>}
+        {!filtered.length&&<p className="model-picker-empty">{models.length?__t("검색 결과가 없어요."):__t("연결된 모델이 없어요.")}</p>}
       </div>
-      <button className="model-picker-manage" type="button" onClick={()=>{setOpen(false);onManage()}}><Plus size={15}/>모델 연결·관리</button>
+      <button className="model-picker-manage" type="button" onClick={()=>{setOpen(false);onManage()}}><Plus size={15}/>{__t("모델 연결·관리")}</button>
     </div>}
   </div>;
 }

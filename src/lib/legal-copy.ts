@@ -9,13 +9,17 @@ const UNIT_DAYS:Record<string,number>={일:1,주:7,개월:30,달:30,년:365};
 /** "약 2~4주"처럼 기간만 적은 짧은 표현. "2주 안에 신청" 같은 법정 기한 문장은 제외합니다. */
 const SHAPE=/^(?:약\s*|대략\s*|보통\s*|통상\s*|평균\s*)?(\d+(?:\.\d+)?)(?:\s*(?:~|-|–)\s*(\d+(?:\.\d+)?))?\s*(일|주|개월|달|년)(?:\s*(?:정도|가량|소요))?$/;
 const DEADLINE_HINT=/이내|안에|까지|마감|전에|부터|기한|법정|제출일|송달일/;
+const EN_SHAPE=/^(?:(?:about|approx(?:imately)?|roughly|around|estimated)\s+)?(\d+(?:\.\d+)?)(?:\s*(?:~|-|–|to)\s*(\d+(?:\.\d+)?))?\s*(days?|weeks?|months?|years?)$/i;
+const EN_DEADLINE_HINT=/\b(within|before|deadline|no later than|from service|file by)\b/i;
 
 export type DurationCopy={label:string;minDays:number;maxDays:number};
 
 /** "약 2~4주", "30~60일"처럼 숫자로 확인된 기간만 남깁니다. */
 export function parseDurationDays(value?:string):{minDays:number;maxDays:number}|null{
  const text=(value||'').replace(/\s+/g,' ').trim();
- if(!text||DEADLINE_HINT.test(text))return null;
+ if(!text||DEADLINE_HINT.test(text)||EN_DEADLINE_HINT.test(text))return null;
+ const english=text.match(EN_SHAPE);
+ if(english){const lo=Number(english[1]),hi=Number(english[2]||english[1]);const u=english[3].toLowerCase();const scale=u.startsWith('day')?1:u.startsWith('week')?7:u.startsWith('month')?30:365;return {minDays:Math.round(Math.min(lo,hi)*scale),maxDays:Math.round(Math.max(lo,hi)*scale)};}
  const shape=text.match(SHAPE);
  if(!shape)return null;
  const lo=Number(shape[1]);const hi=shape[2]?Number(shape[2]):lo;const unit=shape[3];
@@ -49,6 +53,8 @@ export function durationLabel(value?:string):DurationCopy|null{
  const text=(value||'').replace(/\s+/g,' ').trim();
  const days=parseDurationDays(text);
  if(!days)return null;
+ const english=text.match(EN_SHAPE);
+ if(english){const range=english[2]?english[1]+'–'+english[2]:english[1];const unit=english[3].toLowerCase();return {...days,label:'About '+range+' '+(unit.endsWith('s')?unit:unit+'s')};}
  const compact=text.replace(/^(?:대략|보통|통상|평균)\s*/,'').replace(/\s*(?:정도|가량|소요)$/,'').replace(/^약\s*/,'');
  return {...days,label:'약 '+compact};
 }

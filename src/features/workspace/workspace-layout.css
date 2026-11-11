@@ -486,3 +486,13 @@
 .app-shell.dark .mobile-journey .journey-origin{
   background:var(--panel);border-color:rgba(240,242,245,.35);
 }
+
+/* Language switching remains compact in the narrow rail. */
+.rail-language{text-decoration:none;white-space:nowrap}
+.rail-language:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+.rail-language span{font-size:10px;font-weight:700;letter-spacing:-.15px}
+@media(max-width:860px){
+ .workspace-rail .rail-language{width:44px}
+ .workspace-rail .rail-language>span{display:block;font-size:10px}
+ .workspace-rail .rail-language svg{display:none}
+}

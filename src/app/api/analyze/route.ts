@@ -6,6 +6,7 @@ import {reviewPrompt} from '@/lib/analysis-prompts';
 import {fastMapPrompt} from '@/lib/fast-map-prompt';
 import {getProcedureGuidance} from '@/lib/legal-guidance';
 import type {LegalCase} from '@/lib/types';
+import {localeInstruction,legalLookupText} from '@/lib/locale-instructions';
 export const runtime='nodejs';
 export const maxDuration=300;
 function preliminaryLawQueries(input:string){
@@ -20,25 +21,27 @@ function preliminaryLawQueries(input:string){
 export async function GET(){const cfg=await getProvider({preferConfiguredModel:true});return NextResponse.json({aiConnected:!!cfg,model:cfg?.model||null,modelSource:cfg?.source||null,lawApiConnected:!!process.env.LAW_API_OC,analysisVersion:ANALYSIS_VERSION})}
 export async function POST(request:Request){
  let body:any={};try{body=await request.json()}catch{return NextResponse.json({error:'입력한 내용을 읽지 못했어요.'},{status:400})}
+ const locale=body.locale==='en'?'en':'ko';
  const message=text(body.message,7000);if(!message)return NextResponse.json({error:'상황을 입력해 주세요.'},{status:400});
  const previous=body.previous&&typeof body.previous==='object'?body.previous as LegalCase:undefined;
  const controller=new AbortController();
  const signal=AbortSignal.any([request.signal,controller.signal,AbortSignal.timeout(280000)]);
  const run=async(notify:(event:AIProgress)=>void)=>withAIContext({modelId:typeof body.modelId==='string'?body.modelId:undefined,signal,onProgress:notify},async()=>{
-  notify({phase:'analyzing',message:'이야기를 읽고 가능한 방법과 갈라지는 상황을 정리하고 있어요.'});
+  notify({phase:'analyzing',message:locale==='en'?'Reviewing your situation and legal options.':'이야기를 읽고 가능한 방법과 갈라지는 상황을 정리하고 있어요.'});
   const history=(previous?.messages||[]).filter(m=>!m.error).slice(-14).map(m=>({role:m.role,content:m.content}));
   const lastUserMessage=history.filter(m=>m.role==='user').at(-1)?.content;
   const refreshingExisting=body.refresh===true&&lastUserMessage===message;
   const userText=[...history.filter(m=>m.role==='user').map(m=>m.content),...(refreshingExisting?[]:[message])].join('\n');
-  const guidance=getProcedureGuidance(userText);
+  const lookupText=legalLookupText(userText,locale);
+  const guidance=getProcedureGuidance(lookupText);
   let sources=guidance.sources;
-  const context={newMessage:refreshingExisting?'기존 상황과 진행 내용을 다시 점검해 주세요.':message,history,userFacts:previous?.facts||[],existingNodes:previous?.nodes||[],existingEdges:previous?.edges||[],userProgress:previous?.progress||{},
+  const context={locale,newMessage:refreshingExisting?'기존 상황과 진행 내용을 다시 점검해 주세요.':message,history,userFacts:previous?.facts||[],existingNodes:previous?.nodes||[],existingEdges:previous?.edges||[],userProgress:previous?.progress||{},
    officialProcedureNotes:guidance.notes,sources:sources.map(s=>({id:s.id,title:s.title,kind:s.kind,requiredDocuments:s.requiredDocuments,effectiveDate:s.effectiveDate,snippet:s.snippet||'',isFullText:false})),
    today:new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'}),refresh:body.refresh===true};
-  const preliminaryQueries=preliminaryLawQueries(userText);
+  const preliminaryQueries=preliminaryLawQueries(lookupText);
   const preliminarySearch=preliminaryQueries.length?fetchLegalSources({laws:preliminaryQueries,precedents:[]}):null;
-  const rawDraft=await requestObject(fastMapPrompt,JSON.stringify(context),4800);
-  notify({phase:'sources',message:'관련 법령과 연결된 공식 안내를 확인하고 있어요.'});
+  const rawDraft=await requestObject(fastMapPrompt+localeInstruction(locale),JSON.stringify(context),4800);
+  notify({phase:'sources',message:locale==='en'?'Checking relevant laws and official sources.':'관련 법령과 연결된 공식 안내를 확인하고 있어요.'});
   const preliminary=preliminarySearch?await preliminarySearch:{sources:[],texts:[],checked:false};
   const modelLaws=strings(rawDraft.sourceQueries?.laws,4,80);
   const modelPrecedents=strings(rawDraft.sourceQueries?.precedents,2,80);
@@ -57,17 +60,17 @@ export async function POST(request:Request){
    ||/불송치|불기소|약식명령|기소|고소|수사|폭행|스토킹|형사|강제집행|압류|경매|소멸시효|제소기간|법정기한/.test(userText)
    ||draft.nodes.some(n=>n.kind==='route'&&(!n.scenario?.steps.length||!n.scenario?.outcomes.length));
   const reviewContext={userText,officialProcedureNotes:guidance.notes,sources:provisionalSources.map(s=>({id:s.id,title:s.title,kind:s.kind,requiredDocuments:s.requiredDocuments,snippet:s.snippet||''})),draft};
-  if(reviewNeeded)notify({phase:'reviewing',message:'처분과 절차상 중요한 부분을 한 번 더 검토하고 있어요.'});
-  const [retrieved,review]=await Promise.all([sourceTask,reviewNeeded?requestObject(reviewPrompt,JSON.stringify(reviewContext),1600):Promise.resolve({} as Record<string,any>)]);
+  if(reviewNeeded)notify({phase:'reviewing',message:locale==='en'?'Checking important procedural conditions and risks.':'처분과 절차상 중요한 부분을 한 번 더 검토하고 있어요.'});
+  const [retrieved,review]=await Promise.all([sourceTask,reviewNeeded?requestObject(reviewPrompt+localeInstruction(locale),JSON.stringify({...reviewContext,locale}),1600):Promise.resolve({} as Record<string,any>)]);
   sources=Array.from(new Map([...retrieved.sources,...guidance.sources].map(s=>[s.id,s])).values());
   let generated=normalizeAnalysis(rawDraft,previous,sources);
   const issues=[...structuralIssues,...strings(review.issues,6,600)];
   generated=normalizeAnalysis(applyReview(rawDraft,review),previous,sources);
   const reviewHasChanges=review.nodeUpdates?.length||review.removeNodeIds?.length||review.addNodes?.length||Array.isArray(review.edges)||typeof review.answer==='string'||Array.isArray(review.options)||typeof review.question==='string'||Array.isArray(review.openQuestions)||Array.isArray(review.followUpQuestions);
-  if(findAnalysisIssues(generated,userText).length||(issues.length&&!reviewHasChanges)){generated=normalizeAnalysis(await requestObject(fastMapPrompt,JSON.stringify({...context,draft:generated,correctionsRequired:issues}),4800),previous,sources)}
+  if(findAnalysisIssues(generated,userText).length||(issues.length&&!reviewHasChanges)){generated=normalizeAnalysis(await requestObject(fastMapPrompt+localeInstruction(locale),JSON.stringify({...context,draft:generated,correctionsRequired:issues}),4800),previous,sources)}
   const remaining=findAnalysisIssues(generated,userText);
-  if(remaining.length)throw new Error('안내할 기관이나 절차에 확인할 내용이 남아 있어요. 통지서 종류나 사건 진행 상황을 더 알려주거나 다시 정리해 주세요.');
-  if(!generated.nodes.length||!generated.answer)throw new Error('선택지를 완성하지 못했어요. 다시 정리해 주세요.');
+  if(remaining.length)throw new Error(locale==='en'?'Some key legal conditions could not be verified. Please provide the notice type or current case stage and try again.':'안내할 기관이나 절차에 확인할 내용이 남아 있어요. 통지서 종류나 사건 진행 상황을 더 알려주거나 다시 정리해 주세요.');
+  if(!generated.nodes.length||!generated.answer)throw new Error(locale==='en'?'Could not finish the legal roadmap. Please try again.':'선택지를 완성하지 못했어요. 다시 정리해 주세요.');
   return {result:generated,sources,evidenceStatus:sources.length?'partial':'unverified',checkedAt:new Date().toISOString(),analysisVersion:ANALYSIS_VERSION,reviewed:reviewNeeded,corrected:issues.length>0,modelUsed:(await getProvider())?.id};
  });
  if(body.stream===true){

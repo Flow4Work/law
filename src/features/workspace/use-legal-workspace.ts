@@ -17,13 +17,14 @@ import {previewIntake,recordIntakeAnswer,reconcileIntakeResult,intakeSummary,typ
 import type {AnalysisProgressState} from '@/features/shared/analysis-progress';
 import {useMobileLayout} from '@/features/shared/use-mobile-layout';
 import {recordActivity} from '@/lib/activity-client';
+import {useLocale,useT,type Language} from '@/lib/i18n';
 
 const STORE='ai-legal-roadmap-cases-v1';
 const ACTIVE='ai-legal-roadmap-active-v1';
 const PREVIEW_STORE='ai-legal-roadmap-preview-v1';
 const THEMESTORE='ai-legal-roadmap-theme-v3';
 const AUTO_FOLD_KEY='ai-legal-roadmap-auto-folded-v1';
-const blank=():LegalCase=>({id:crypto.randomUUID(),name:'새 대화',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),messages:[],nodes:[],edges:[],facts:[],sources:[],evidenceStatus:'unverified'});
+const blank=(locale:Language='ko'):LegalCase=>({id:crypto.randomUUID(),name:locale==='en'?'New chat':'새 대화',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),messages:[],nodes:[],edges:[],facts:[],sources:[],evidenceStatus:'unverified'});
 const demo:LegalCase=CIVIL_DEMO;
 const waitFastExample=(signal:AbortSignal)=>new Promise<void>((resolve,reject)=>{
  if(signal.aborted){reject(new Error('cancelled'));return}
@@ -32,10 +33,14 @@ const waitFastExample=(signal:AbortSignal)=>new Promise<void>((resolve,reject)=>
  signal.addEventListener('abort',onAbort,{once:true});
 });
 const shortCaseTitle=limitCaseTitle;
+const englishCaseTitle=(s:string)=>{const title=s.replace(/\s+/g,' ').trim()||'New chat';return title.length>64?title.slice(0,61).trimEnd()+'…':title};
 export function useLegalWorkspace(){
+ const locale=useLocale();
+ const __t=useT();
+ const storageKey=(key:string)=>locale==='en'?'en:'+key:key;
  const mobile=useMobileLayout();
  const [cases,setCases]=useState<LegalCase[]>([]);
- const [previewCase,setPreviewCase]=useState<LegalCase>(demo);
+ const [previewCase,setPreviewCase]=useState<LegalCase>(locale==='en'?blank(locale):demo);
  const [showcaseStage,setShowcaseStage]=useState(-1);
  const [activeId,setActiveId]=useState<string|null>(null);
  const [hydrated,setHydrated]=useState(false);
@@ -112,7 +117,7 @@ export function useLegalWorkspace(){
   // scenario에서 동적으로 펼친 카드도 자체 주의사항을 검증할 수 있어야 합니다.
   const requestCase=node.scenarioParentId?{...snapshot,nodes:[node,...snapshot.nodes]}:snapshot;
    try{
-    const response=await fetch('/api/step-details',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({case:requestCase,id:node.id,purpose:'documents'})});
+    const response=await fetch('/api/step-details',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({case:requestCase,id:node.id,purpose:'documents',locale})});
     const payload=await response.json();if(!response.ok)throw new Error(payload.error||'상세 내용을 불러오지 못했어요.');
     setCases(items=>items.map(value=>{
      if(value.id!==snapshot.id||value.messages.length!==snapshot.messages.length)return value;
@@ -144,20 +149,20 @@ export function useLegalWorkspace(){
    setCases([showcaseCase(start)]);setActiveId('portfolio-showcase');setTheme('light');setChatCollapsed(false);setHydrated(true);return;
   }
   if(captureMode.current){
-   setCases([]);setActiveId(null);setPreviewCase(structuredClone(demo));
+   setCases([]);setActiveId(null);setPreviewCase(locale==='en'?blank(locale):structuredClone(demo));
    setTheme('light');setChatCollapsed(true);setHydrated(true);return;
   }
   try{
-    const savedPreview=JSON.parse(localStorage.getItem(PREVIEW_STORE)||'null');
+    const savedPreview=JSON.parse(localStorage.getItem(storageKey(PREVIEW_STORE))||'null');
     if(savedPreview?.id===demo.id&&Array.isArray(savedPreview.nodes))setPreviewCase(savedPreview);
-    const parsed=JSON.parse(localStorage.getItem(STORE)||'[]');
-    const restored:LegalCase[]=Array.isArray(parsed)?parsed.filter(x=>x&&typeof x.id==='string'&&(!x.demo||x.examplePreset==='wage-fast'||x.examplePreset==='deposit-fast'||x.examplePreset==='police-fast')).slice(0,50).map(x=>{const oldName=typeof x.name==='string'?x.name:'새 대화';const firstMessage=Array.isArray(x.messages)?x.messages.find((m:Message)=>m.role==='user')?.content:'';return normalizeSavedRoadmapTerms({...x,name:summarizeCaseTitle(oldName.endsWith('…')&&firstMessage?firstMessage:oldName)});}):[];
-    const savedFoldIds=JSON.parse(localStorage.getItem(AUTO_FOLD_KEY)||'[]');
+    const parsed=JSON.parse(localStorage.getItem(storageKey(STORE))||'[]');
+    const restored:LegalCase[]=Array.isArray(parsed)?parsed.filter(x=>x&&typeof x.id==='string'&&(!x.demo||x.examplePreset==='wage-fast'||x.examplePreset==='deposit-fast'||x.examplePreset==='police-fast')).slice(0,50).map(x=>{const oldName=typeof x.name==='string'?x.name:'새 대화';const firstMessage=Array.isArray(x.messages)?x.messages.find((m:Message)=>m.role==='user')?.content:'';return normalizeSavedRoadmapTerms({...x,name:locale==='en'?englishCaseTitle(oldName.endsWith('…')&&firstMessage?firstMessage:oldName):summarizeCaseTitle(oldName.endsWith('…')&&firstMessage?firstMessage:oldName)});}):[];
+    const savedFoldIds=JSON.parse(localStorage.getItem(storageKey(AUTO_FOLD_KEY))||'[]');
     autoFoldedCases.current=new Set([...(Array.isArray(savedFoldIds)?savedFoldIds.filter((id:unknown):id is string=>typeof id==='string'):[]),...restored.filter(c=>c.nodes.length>0&&!c.intake).map(c=>c.id)]);
-    if(!restored.length){const first=blank();setCases([first]);setActiveId(first.id)}
-    else {setCases(restored);const id=localStorage.getItem(ACTIVE);if(id&&restored.some(item=>item.id===id))setActiveId(id);}
-    const t=localStorage.getItem(THEMESTORE);if(t==='dark')setTheme('dark');
-    setPreferredModel(localStorage.getItem('legal-preferred-model')||'');
+    if(!restored.length){const first=blank(locale);setCases([first]);setActiveId(first.id)}
+    else {setCases(restored);const id=localStorage.getItem(storageKey(ACTIVE));if(id&&restored.some(item=>item.id===id))setActiveId(id);}
+    const t=localStorage.getItem(storageKey(THEMESTORE));if(t==='dark')setTheme('dark');
+    setPreferredModel(localStorage.getItem(storageKey('legal-preferred-model'))||'');
   }catch{}setHydrated(true);
  },[]);
  useEffect(()=>{
@@ -205,17 +210,17 @@ export function useLegalWorkspace(){
   if(!hydrated||!inventory?.defaultId||captureMode.current)return;
   const defaultModel=inventory.models.find(model=>model.id===inventory.defaultId);
   if(defaultModel?.model!=='gpt-6-luna')return;
-  const migrationKey='legal-default-model-migration-luna-v1';
+  const migrationKey=storageKey('legal-default-model-migration-luna-v1');
   if(localStorage.getItem(migrationKey)==='complete')return;
   setCases(items=>migrateEmptyConversationModels(items,inventory.defaultId));
   setPreferredModel(inventory.defaultId);
-  localStorage.setItem('legal-preferred-model',inventory.defaultId);
+  localStorage.setItem(storageKey('legal-preferred-model'),inventory.defaultId);
   localStorage.setItem(migrationKey,'complete');
  },[hydrated,inventory]);
- useEffect(()=>{if(hydrated&&!captureMode.current)localStorage.setItem(STORE,JSON.stringify(cases))},[cases,hydrated]);
- useEffect(()=>{if(hydrated&&!captureMode.current)localStorage.setItem(PREVIEW_STORE,JSON.stringify(previewCase))},[previewCase,hydrated]);
- useEffect(()=>{if(hydrated&&!captureMode.current){activeId?localStorage.setItem(ACTIVE,activeId):localStorage.removeItem(ACTIVE)}},[activeId,hydrated]);
- useEffect(()=>{if(hydrated&&!captureMode.current)localStorage.setItem(THEMESTORE,theme)},[theme,hydrated]);
+ useEffect(()=>{if(hydrated&&!captureMode.current)localStorage.setItem(storageKey(STORE),JSON.stringify(cases))},[cases,hydrated]);
+ useEffect(()=>{if(hydrated&&!captureMode.current)localStorage.setItem(storageKey(PREVIEW_STORE),JSON.stringify(previewCase))},[previewCase,hydrated]);
+ useEffect(()=>{if(hydrated&&!captureMode.current){activeId?localStorage.setItem(storageKey(ACTIVE),activeId):localStorage.removeItem(storageKey(ACTIVE))}},[activeId,hydrated]);
+ useEffect(()=>{if(hydrated&&!captureMode.current)localStorage.setItem(storageKey(THEMESTORE),theme)},[theme,hydrated]);
  useEffect(()=>{if(hydrated&&!captureMode.current&&preferredModel)localStorage.setItem('legal-preferred-model',preferredModel)},[preferredModel,hydrated]);
  useEffect(()=>{if(!active?.messages.length&&!busy)return;const list=bottomRef.current?.closest('.conversation-list');if(list)list.scrollTo({top:list.scrollHeight,behavior:'smooth'});},[activeId,active?.messages.length,busy]);
  useEffect(()=>{if(activeId==='portfolio-showcase')return;setSelected(null);setFocusId(null);setIntakeHintCaseId(null);setChatCollapsed(captureMode.current&&!new URLSearchParams(window.location.search).has('showcase'))},[activeId]);
@@ -223,11 +228,11 @@ export function useLegalWorkspace(){
  useEffect(()=>{
    if(!hydrated||!active||busy||active.intake||!active.nodes.length||!active.messages.some(m=>m.role==='assistant'&&!m.error)||autoFoldedCases.current.has(active.id))return;
    autoFoldedCases.current.add(active.id);
-   if(!captureMode.current)try{localStorage.setItem(AUTO_FOLD_KEY,JSON.stringify([...autoFoldedCases.current].slice(-100)))}catch{}
+   if(!captureMode.current)try{localStorage.setItem(storageKey(AUTO_FOLD_KEY),JSON.stringify([...autoFoldedCases.current].slice(-100)))}catch{}
    if(window.matchMedia('(min-width: 861px)').matches)setChatCollapsed(true);
    else setMobileView('map');
  },[hydrated,active,busy]);
- const newCase=()=>{recordActivity('new_case');wageExampleArmedRef.current=null;setWageExampleArmed(false);const c={...blank(),modelId:inventory?.defaultId||undefined};setCases(x=>[...x,c]);setActiveId(c.id);setChatCollapsed(false);setSelected(null);setInput('');setError('');setHistoryOpen(false);setMobileView('chat');inputRef.current?.focus()};
+ const newCase=()=>{recordActivity('new_case');wageExampleArmedRef.current=null;setWageExampleArmed(false);const c={...blank(locale),modelId:inventory?.defaultId||undefined};setCases(x=>[...x,c]);setActiveId(c.id);setChatCollapsed(false);setSelected(null);setInput('');setError('');setHistoryOpen(false);setMobileView('chat');inputRef.current?.focus()};
  const deleteCase=(id:string)=>{if(!busy)setDeleteTarget(id)};
  const closeTab=(id:string)=>{
   if(busy)return;
@@ -256,7 +261,7 @@ export function useLegalWorkspace(){
    let scenario=route.scenario;
    if(!scenario?.steps.length){
     setLoadingProceed(v=>({...v,[key]:true}));
-    const response=await fetch('/api/step-details',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({case:snapshot,id:route.id,purpose:'procedure'})});
+    const response=await fetch('/api/step-details',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({case:snapshot,id:route.id,purpose:'procedure',locale})});
     const payload=await response.json();if(!response.ok)throw new Error(payload.error||'다음 절차를 불러오지 못했어요.');
     scenario=payload.node?.scenario;
     if(!scenario?.steps.length||scenario.steps.some(step=>!step.title?.trim()||!step.description?.trim()))throw new Error('다음 절차를 확인하지 못했어요. 다시 시도해 주세요.');
@@ -296,7 +301,7 @@ export function useLegalWorkspace(){
      const createdAt=new Date().toISOString();
      const caseId=previous?.id||crypto.randomUUID();
      const presetNames:Record<ExamplePreset,string>={'wage-fast':'퇴사 후 임금체불 · 예시','deposit-fast':'보증금 반환 · 예시','police-fast':'경찰 출석 연락 · 예시'};
-     const start:LegalCase={...(previous||blank()),id:caseId,demo:true,examplePreset:selectedPreset,name:presetNames[selectedPreset],updatedAt:createdAt,
+     const start:LegalCase={...(previous||blank(locale)),id:caseId,demo:true,examplePreset:selectedPreset,name:presetNames[selectedPreset],updatedAt:createdAt,
        messages:[{id:crypto.randomUUID(),role:'user',content:message,createdAt}],nodes:[],edges:[],facts:[],sources:[],intake:undefined};
      setCases(items=>items.some(c=>c.id===caseId)?items.map(c=>c.id===caseId?start:c):[...items,start]);
      setActiveId(caseId);
@@ -304,7 +309,7 @@ export function useLegalWorkspace(){
        await waitFastExample(controller.signal);
        if(requestVersion.current!==version||controller.signal.aborted)return;
        const plan=examplePlan(selectedPreset);
-       setCases(items=>items.map(c=>c.id===caseId?{...c,intake:plan,...previewIntake(plan)}:c));
+       setCases(items=>items.map(c=>c.id===caseId?{...c,intake:plan,...previewIntake(plan,locale)}:c));
      }catch{
        if(requestVersion.current===version)setCases(items=>items.map(c=>c.id===caseId?{...c,messages:[...c.messages,{id:crypto.randomUUID(),role:'assistant',content:'요청을 멈췄어요. 예시를 다시 시작할 수 있어요.',createdAt:new Date().toISOString()}]}:c));
      }finally{
@@ -323,23 +328,23 @@ export function useLegalWorkspace(){
    const userMsg:Message={id:crypto.randomUUID(),role:'user',content:message,createdAt:new Date().toISOString()};
    const lastMessage=base.messages[base.messages.length-1];
    const retryMessages=refresh&&lastMessage?.role==='assistant'&&lastMessage.error?base.messages.slice(0,-1):base.messages;
-   const baseWithMessage={...base,name:base.messages.length?shortCaseTitle(base.name):summarizeCaseTitle(message),updatedAt:new Date().toISOString(),messages:refresh?retryMessages:recordUserMessage?[...base.messages,userMsg]:base.messages};
+   const baseWithMessage={...base,name:base.messages.length?(locale==='en'?englishCaseTitle(base.name):shortCaseTitle(base.name)):(locale==='en'?englishCaseTitle(message):summarizeCaseTitle(message)),updatedAt:new Date().toISOString(),messages:refresh?retryMessages:recordUserMessage?[...base.messages,userMsg]:base.messages};
    setCases(x=>x.some(c=>c.id===base.id)?x.map(c=>c.id===base.id?baseWithMessage:c):[...x,baseWithMessage]);
    setActiveId(base.id);
    try{
      if(firstIntake){
        setAnalysisProgress({phase:'intake',message:'답변에 따라 달라지는 조건을 먼저 찾고 있어요.'});
-       const response=await fetch('/api/intake',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message,modelId:effectiveModelId}),signal:controller.signal});
+       const response=await fetch('/api/intake',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message,modelId:effectiveModelId,locale}),signal:controller.signal});
        if(!response.ok)throw new Error('확인 질문을 준비하지 못했어요. 다시 시도해 주세요.');
        const data=await response.json();
        if(controller.signal.aborted||requestVersion.current!==version)return;
        const plan: IntakePlan=data.plan;
-       const partial=previewIntake(plan);
+       const partial=previewIntake(plan,locale);
        setCases(x=>x.map(c=>c.id===base.id?{...c,intake:plan,...partial,updatedAt:new Date().toISOString()}:c));
        return;
      }
      const analysisPrevious=previous?.intake?{...previous,nodes:[],edges:[],facts:[]}:previous;
-     const response=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message,previous:analysisPrevious,refresh,modelId:effectiveModelId,stream:true}),signal:controller.signal});
+     const response=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message,previous:analysisPrevious,refresh,modelId:effectiveModelId,stream:true,locale}),signal:controller.signal});
      if(!response.ok){const failure=await response.json().catch(()=>({}));throw new Error(failure.error||'응답을 받지 못했어요.')}
      let payload:any=null;
      await readAnalysisStream(response,event=>{if(controller.signal.aborted||requestVersion.current!==version)return;if(event.type==='status')setAnalysisProgress(event);else if(event.type==='result')payload=event;else if(event.type==='error')throw new Error(event.error)});
@@ -351,7 +356,7 @@ export function useLegalWorkspace(){
      const freshSources:LegalSource[]=Array.isArray(payload.sources)?payload.sources:[];
      const sources=Array.from(new Map([...(previous?.sources||[]),...freshSources].map(s=>[s.id,s])).values());
      const facts=Array.from(new Set([...(previous?.facts||[]),...result.facts])).slice(0,30);
-     setCases(x=>x.map(c=>c.id===base.id?{...c,intake:undefined,modelId:payload.modelUsed||effectiveModelId,name:summarizeCaseTitle(result.title||c.name),messages:[...c.messages,assistantMsg],facts,
+     setCases(x=>x.map(c=>c.id===base.id?{...c,intake:undefined,modelId:payload.modelUsed||effectiveModelId,name:locale==='en'?englishCaseTitle(result.title||c.name):summarizeCaseTitle(result.title||c.name),messages:[...c.messages,assistantMsg],facts,
        nodes:result.nodes,edges:result.edges,sources,openQuestions:result.openQuestions||[],analysisVersion:payload.analysisVersion||0,evidenceStatus:payload.evidenceStatus||'unverified',
        lastChecked:payload.checkedAt||undefined,updatedAt:new Date().toISOString()}:c));
    }catch(e){
@@ -360,7 +365,7 @@ export function useLegalWorkspace(){
      const msg=cancelled?'요청을 멈췄어요. 대화와 기존 지도는 그대로 남아 있어요.':e instanceof Error?e.message:'연결 오류가 발생했어요.';
      setCases(x=>x.map(c=>c.id===base.id?{...c,messages:[...c.messages,{id:crypto.randomUUID(),role:'assistant',content:msg,error:!cancelled,createdAt:new Date().toISOString()}]}:c));
    }finally{if(requestAbort.current===controller){requestAbort.current=null;busyRef.current=false;setBusy(false)}}
- },[active,input,busy,chosenModelId,inventory]);
+ },[active,input,busy,chosenModelId,inventory,locale]);
  const acceptIntakeAnswer=async(answer:IntakeAnswer)=>{
    if(!active?.intake||busy||busyRef.current)return;
    const originalCase=active;
@@ -370,7 +375,7 @@ export function useLegalWorkspace(){
    const plan=recorded.intake;
    if(active.examplePreset&&(!answer.detail.trim()||(active.examplePreset==='wage-fast'&&plan.answers.length===plan.questions.length))){
      const nextPlan=nextExamplePlan(active.examplePreset,plan);
-     const next:LegalCase={...recorded,intake:nextPlan,...previewIntake(nextPlan)};
+     const next:LegalCase={...recorded,intake:nextPlan,...previewIntake(nextPlan,locale)};
      const controller=new AbortController();const version=++requestVersion.current;
      requestAbort.current=controller;busyRef.current=true;setBusy(true);setError('');
      setAnalysisProgress({phase:nextPlan.answers.length>=3?'analyzing':'intake',
@@ -385,7 +390,7 @@ export function useLegalWorkspace(){
          const assistantMsg:Message={id:crypto.randomUUID(),role:'assistant',content:result.reply,createdAt:new Date().toISOString()};
          setCases(items=>items.map(c=>c.id===active.id?{...c,...result,intake:undefined,messages:[...next.messages,assistantMsg],updatedAt:new Date().toISOString()}:c));
        }else{
-         setCases(items=>items.map(c=>c.id===active.id?{...c,intake:nextPlan,...previewIntake(nextPlan)}:c));
+         setCases(items=>items.map(c=>c.id===active.id?{...c,intake:nextPlan,...previewIntake(nextPlan,locale)}:c));
        }
      }catch{
        if(requestVersion.current===version)setCases(items=>items.map(c=>c.id===active.id?active:c));
@@ -396,26 +401,26 @@ export function useLegalWorkspace(){
    }
    // The API interview expects only questions already asked; a local preset knows all three in advance.
    const apiPlan=recorded.examplePreset?{...plan,questions:plan.questions.slice(0,plan.answers.length)}:plan;
-   const next:LegalCase={...recorded,intake:apiPlan,demo:recorded.examplePreset?false:recorded.demo,examplePreset:undefined,...previewIntake(apiPlan)};
+   const next:LegalCase={...recorded,intake:apiPlan,demo:recorded.examplePreset?false:recorded.demo,examplePreset:undefined,...previewIntake(apiPlan,locale)};
    setIntakeHintCaseId(null);
    setCases(items=>items.map(c=>c.id===active.id?next:c));
    // A third answer completes the interview without an extra LLM round-trip.
-   if(plan.answers.length>=3){void submit(intakeSummary(plan),false,undefined,next,false);return}
+   if(plan.answers.length>=3){void submit(intakeSummary(plan,locale),false,undefined,next,false);return}
    const controller=new AbortController();const version=++requestVersion.current;
    requestAbort.current=controller;busyRef.current=true;setBusy(true);
    setAnalysisProgress({phase:'intake',message:'방금 알려주신 내용을 토대로 다음 핵심 쟁점을 살펴보고 있어요.'});
    try{
      const response=await fetch('/api/intake',{method:'POST',headers:{'Content-Type':'application/json'},
-       body:JSON.stringify({message:apiPlan.original,plan:apiPlan,modelId:chosenModelId}),signal:controller.signal});
+       body:JSON.stringify({message:apiPlan.original,plan:apiPlan,modelId:chosenModelId,locale}),signal:controller.signal});
      const payload=await response.json().catch(()=>({}));
      if(!response.ok)throw new Error(payload.error||'다음 질문을 불러오지 못했어요.');
      if(controller.signal.aborted||requestVersion.current!==version)return;
      const updatedPlan: IntakePlan=payload.plan;
-     const updated:LegalCase={...next,intake:updatedPlan,...previewIntake(updatedPlan),updatedAt:new Date().toISOString()};
+     const updated:LegalCase={...next,intake:updatedPlan,...previewIntake(updatedPlan,locale),updatedAt:new Date().toISOString()};
      setCases(items=>items.map(c=>c.id===next.id?updated:c));
      if(updatedPlan.complete){
        requestAbort.current=null;busyRef.current=false;setBusy(false);
-       void submit(intakeSummary(updatedPlan),false,undefined,updated,false);
+       void submit(intakeSummary(updatedPlan,locale),false,undefined,updated,false);
        return;
      }
    }catch(e){
@@ -433,7 +438,7 @@ export function useLegalWorkspace(){
  const fillInput=(text:string)=>{recordActivity('example',text);const armed=!active?.messages.length?presetForStory(text):null;wageExampleArmedRef.current=armed;setWageExampleArmed(Boolean(armed));setInput(text);setSelected(null);setChatCollapsed(false);setMobileView('chat');requestAnimationFrame(()=>inputRef.current?.focus())};
  const changeInput=(text:string)=>{wageExampleArmedRef.current=null;setWageExampleArmed(false);setInput(text)};
  const done=current.nodes.filter(n=>n.status==='done');
- const completedSummary=`완료한 절차 ${done.length}개`;
+ const completedSummary=locale==='en'?`${done.length} completed steps`:`완료한 절차 ${done.length}개`;
  const activatedRoutes=current.nodes.filter(n=>n.kind==='route'&&n.userConfirmed&&n.scenario);
  const focusedRoute=activatedRoutes.find(n=>(selected||focusId)===n.id||(selected||focusId)?.startsWith('scenario:'+n.id+':'))||activatedRoutes.find(n=>n.status==='current')||activatedRoutes[0];
  const flowIds=focusedRoute?[focusedRoute.id,...expanded.nodes.filter(n=>n.scenarioParentId===focusedRoute.id&&n.kind==='step').map(n=>n.id),...expanded.nodes.filter(n=>n.scenarioParentId===focusedRoute.id&&n.kind==='outcome').map(n=>n.id)]:[];
@@ -461,5 +466,5 @@ export function useLegalWorkspace(){
      else{bottomRef.current?.scrollIntoView({block:'end'});inputRef.current?.focus()}
    });
  };
- return {showcaseStage,wageExampleArmed,changeInput,mobile,cases,setCases,activeId,setActiveId,theme,setTheme,historyOpen,setHistoryOpen,sourcesOpen,setSourcesOpen,selected:resolvedSelected,setSelected,focusId,setFocusId,input,setInput,mobileView,setMobileView,chatCollapsed,setChatCollapsed,busy,error,setError,inventory,settingsOpen,setSettingsOpen,analysisProgress,requestAbort,bottomRef,inputRef,active,current,chosen,chosenModelId,chosenModel,deleteValue,loadingDetails,detailErrors,detailKey,loadDetails,loadingProceed,proceedErrors,mapCase,sorted,hasMessages,alternativeModel,newCase,deleteCase,closeTab,confirmDelete,setDeleteTarget,applyInventory,chooseModel,example,fillInput,submit,acceptIntakeAnswer,retryWithAlternative,startStep,finishStep,chooseStep,selectNode,done,completedSummary,mapStatusText,continueMapConversation,flowIds,flowPosition,focusFlow};
+ return {showcaseStage,wageExampleArmed,changeInput,mobile,cases,setCases,activeId,setActiveId,theme,setTheme,historyOpen,setHistoryOpen,sourcesOpen,setSourcesOpen,selected:resolvedSelected,setSelected,focusId,setFocusId,input,setInput,mobileView,setMobileView,chatCollapsed,setChatCollapsed,busy,error:__t(error),setError,inventory,settingsOpen,setSettingsOpen,analysisProgress:{...analysisProgress,message:__t(analysisProgress.message)},requestAbort,bottomRef,inputRef,active,current,chosen,chosenModelId,chosenModel,deleteValue,loadingDetails,detailErrors,detailKey,loadDetails,loadingProceed,proceedErrors,mapCase,sorted,hasMessages,alternativeModel,newCase,deleteCase,closeTab,confirmDelete,setDeleteTarget,applyInventory,chooseModel,example,fillInput,submit,acceptIntakeAnswer,retryWithAlternative,startStep,finishStep,chooseStep,selectNode,done,completedSummary,mapStatusText:__t(mapStatusText),continueMapConversation,flowIds,flowPosition,focusFlow};
 }

@@ -1,4 +1,5 @@
 'use client';
+import {useT} from '@/lib/i18n';
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {ReactFlow,Controls,Background,BackgroundVariant,Handle,Position,BaseEdge,MarkerType,useReactFlow,ViewportPortal,type EdgeProps,type NodeProps} from '@xyflow/react';
 import {ChevronRight,Check,Clock3} from 'lucide-react';
@@ -11,6 +12,7 @@ import {mapCardPeriod,groupProcedurePeriod,groupProcedureTitle} from './map-dura
 import {isPortfolioCapture} from '@/lib/portfolio-capture';
 import {procedureName} from '@/lib/concise-copy';
 function StageNode({data,selected}:NodeProps){
+ const __t=useT();
  const d=data as {stage:RoadmapNode;parentRoute?:RoadmapNode;peerRoutes?:RoadmapNode[];legalSources?:LegalSource[];onOpen:()=>void;pending?:boolean;sourcePorts?:number[];targetPorts?:number[];branchHint?:string;isRoot?:boolean};
  const n=d.stage;
  // Saved maps predating the kind field still need factual-root and actionable-route styling.
@@ -24,15 +26,15 @@ function StageNode({data,selected}:NodeProps){
  const shortDescription=summaryLines.length<=2&&summaryLines.every(line=>line.length<=36)&&displaySummary.replace(/\n/g,'').length<=49;
  const parallelNote=!mandatoryNote&&shortDescription?roadmapParallelNote({...n,kind:visualKind},d.peerRoutes||[]):null;
  return <div className={'stage-card status-'+n.status+(visualKind==='situation'?' situation-card':'')+(n.scenario?' scenario-card':'')+(n.scenarioParentId?' process-'+visualKind:'')+(selected?' selected':'')}>
-    <button className="stage-open" aria-label={procedureName(n.title)+' 자세히 알아보기'} onClick={e=>{e.stopPropagation();d.onOpen()}}/>
+    <button className="stage-open" aria-label={procedureName(n.title)+__t(" 자세히 알아보기")} onClick={e=>{e.stopPropagation();d.onOpen()}}/>
     {(d.targetPorts||[50]).map((percent,i)=><Handle key={i} type="target" id={'in-'+i} position={Position.Left} style={{top:percent+'%'}} className="flow-handle"/>)}
-    <div className="stage-card-top"><span className={'stage-pill '+(visualKind==='completion'?'stage-completion':visualKind==='route'?'stage-keyword':n.status)}>{visualKind==='situation'?'내 상황':visualKind==='step'?'진행 절차':visualKind==='outcome'?'가능한 결과':visualKind==='followup'?'후속 절차':visualKind==='completion'?'종료':visualKind==='route'?routeKeyword(n):NODE_STATUS[n.status].label}</span>{n.status==='verify'&&n.kind!=='outcome'&&n.kind!=='completion'&&<span className="stage-state verify">확인 필요</span>}{n.status==='done'&&<span className="stage-state done"><Check size={12}/>완료</span>}</div>
+    <div className="stage-card-top"><span className={'stage-pill '+(visualKind==='completion'?'stage-completion':visualKind==='route'?'stage-keyword':n.status)}>{visualKind==='situation'?__t("내 상황"):visualKind==='step'?__t("진행 절차"):visualKind==='outcome'?__t("가능한 결과"):visualKind==='followup'?__t("후속 절차"):visualKind==='completion'?__t("종료"):visualKind==='route'?routeKeyword(n):__t(NODE_STATUS[n.status].label)}</span>{n.status==='verify'&&n.kind!=='outcome'&&n.kind!=='completion'&&<span className="stage-state verify">{__t("확인 필요")}</span>}{n.status==='done'&&<span className="stage-state done"><Check size={12}/>{__t("완료")}</span>}</div>
     <div className="stage-title">{procedureName(n.title)}</div>
     <div className={'stage-description'+(branchCondition?' stage-condition':'')+(mandatoryNote?' stage-description-required':'')}>{displaySummary}</div>
-    {mandatoryNote&&<div className="stage-required-note" title="법적 필수 선행조건">{mandatoryNote.text}</div>}
-    {parallelNote&&<div className="stage-parallel-note">{parallelNote}</div>}
-    {d.pending&&<div className="node-future-skeleton" aria-label="아직 확인 중인 절차" aria-hidden="true"><i/><i/></div>}
-    {!d.pending&&<div className="stage-card-footer"><span className={'stage-period '+period.category} title={period.note}>{period.label&&<Clock3 size={13}/>} {period.label}</span><span>자세히 보기 <ChevronRight size={13}/></span></div>}
+    {mandatoryNote&&<div className="stage-required-note" title={__t("법적 필수 선행조건")}>{__t(mandatoryNote.text)}</div>}
+    {parallelNote&&<div className="stage-parallel-note">{__t(parallelNote)}</div>}
+    {d.pending&&<div className="node-future-skeleton" aria-label={__t("아직 확인 중인 절차")} aria-hidden="true"><i/><i/></div>}
+    {!d.pending&&<div className="stage-card-footer"><span className={'stage-period '+period.category} title={__t(period.note)}>{period.label&&<Clock3 size={13}/>} {__t(period.label)}</span><span>{__t("자세히 보기")} <ChevronRight size={13}/></span></div>}
     {(d.sourcePorts||[50]).map((percent,i)=><Handle key={i} type="source" id={'out-'+i} position={Position.Right} style={{top:percent+'%'}} className="flow-handle"/>)}
  </div>;
 }
@@ -97,6 +99,7 @@ function RoadmapConnector({id,sourceX,sourceY,targetX,targetY,markerEnd,style,da
 }
 const edgeTypes={roadmap:RoadmapConnector};
 export function Canvas({value,selected,focusId,onSelect,busy}:{value:LegalCase;selected:string|null;focusId:string|null;onSelect:(id:string)=>void;busy:boolean}){
+ const __t=useT();
  const [alignment,setAlignment]=useState<RoadmapAlignment>('top');
  const [alignmentLoaded,setAlignmentLoaded]=useState(false);
  useEffect(()=>{if(!isPortfolioCapture())try{if(localStorage.getItem('legal-roadmap-alignment-v1')==='center')setAlignment('center')}catch{}setAlignmentLoaded(true)},[]);
@@ -290,17 +293,17 @@ export function Canvas({value,selected,focusId,onSelect,busy}:{value:LegalCase;s
   setViewport({x:bounds.width*.5-(node.position.x+ROADMAP_CARD.width/2)*zoom,y:bounds.height*.5-(node.position.y+ROADMAP_CARD.height/2)*zoom,zoom},{duration:180});
  },[focusId,ready,graph.nodes,setViewport]);
  return <div className="canvas-surface" ref={canvasRef}>
-  <div className="map-alignment-switch" role="group" aria-label="지도 정렬 방식">
-   <button type="button" aria-label="위쪽 정렬로 보기" aria-pressed={alignment==='top'} onClick={()=>changeAlignment('top')}>위쪽 정렬</button>
-   <button type="button" aria-label="가운데 정렬로 보기" aria-pressed={alignment==='center'} onClick={()=>changeAlignment('center')}>가운데 정렬</button>
+  <div className="map-alignment-switch" role="group" aria-label={__t("지도 정렬 방식")}>
+   <button type="button" aria-label={__t("위쪽 정렬로 보기")} aria-pressed={alignment==='top'} onClick={()=>changeAlignment('top')}>{__t("위쪽 정렬")}</button>
+   <button type="button" aria-label={__t("가운데 정렬로 보기")} aria-pressed={alignment==='center'} onClick={()=>changeAlignment('center')}>{__t("가운데 정렬")}</button>
   </div>
   <ReactFlow onInit={()=>setReady(true)} nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
     onNodeClick={(_,n)=>onSelect(n.id)} nodesDraggable={false} nodesConnectable={false}
     elementsSelectable fitViewOptions={{padding:.17,minZoom:.62,maxZoom:1.02}} minZoom={.42} maxZoom={1.6}
     zoomOnScroll={false} panOnScroll zoomActivationKeyCode="Control" zoomOnPinch preventScrolling
-    proOptions={{hideAttribution:true}} defaultEdgeOptions={{type:'roadmap'}} className="roadmap-flow" aria-label="가능한 방법과 상황별 선택지 지도" ariaLabelConfig={{'controls.zoomIn.ariaLabel':'확대','controls.zoomOut.ariaLabel':'축소','controls.fitView.ariaLabel':'전체 보기'}}>
+    proOptions={{hideAttribution:true}} defaultEdgeOptions={{type:'roadmap'}} className="roadmap-flow" aria-label={__t("가능한 방법과 상황별 선택지 지도")} ariaLabelConfig={{'controls.zoomIn.ariaLabel':__t("확대"),'controls.zoomOut.ariaLabel':__t("축소"),'controls.fitView.ariaLabel':__t("전체 보기")}}>
     <Background variant={BackgroundVariant.Dots} gap={28} size={.8} color="var(--map-grid-line)"/>
     <ViewportPortal>{procedureGroups.map(group=><div key={group.id} className="procedure-group-bracket" style={{left:group.left,top:group.top,width:group.width}} aria-hidden="true"><svg className="procedure-group-bracket-line" width={group.width} height={35} viewBox={`0 0 ${group.width} 35`} preserveAspectRatio="none"><path d={`M 1 31 L 1 23 Q 1 12 12 12 H ${group.width-12} Q ${group.width-1} 12 ${group.width-1} 23 V 31`}/></svg><span style={{left:group.width/2}} title={group.period.note}><strong>{group.title}</strong><span className={'procedure-group-duration'+(group.period.estimated?'':' is-unverified')}>{group.period.label}</span></span></div>)}</ViewportPortal>
-    <Controls showInteractive={false} position="bottom-right" aria-label="지도 크기 조절"><button className="react-flow__controls-button readable-scale" aria-label="읽기 편한 크기로 보기" title="읽기 편한 크기 (100%)" onClick={()=>{const root=graph.nodes.find(n=>(n.data.stage as RoadmapNode).kind==='situation')||graph.nodes[0];if(root)setViewport({x:36-root.position.x,y:86-Math.min(...graph.nodes.map(n=>n.position.y)),zoom:1},{duration:180})}}>1:1</button></Controls>
- </ReactFlow><div className="map-reading-guide"><span className="map-path-key"/>{focusedIds?'빨간 선은 선택한 경로예요':'카드를 눌러 경로를 살펴보세요'}<span className="map-pan-hint">드래그하여 이동</span></div></div>;
+    <Controls showInteractive={false} position="bottom-right" aria-label={__t("지도 크기 조절")}><button className="react-flow__controls-button readable-scale" aria-label={__t("읽기 편한 크기로 보기")} title={__t("읽기 편한 크기 (100%)")} onClick={()=>{const root=graph.nodes.find(n=>(n.data.stage as RoadmapNode).kind==='situation')||graph.nodes[0];if(root)setViewport({x:36-root.position.x,y:86-Math.min(...graph.nodes.map(n=>n.position.y)),zoom:1},{duration:180})}}>1:1</button></Controls>
+ </ReactFlow><div className="map-reading-guide"><span className="map-path-key"/>{focusedIds?__t("빨간 선은 선택한 경로예요"):__t("카드를 눌러 경로를 살펴보세요")}<span className="map-pan-hint">{__t("드래그하여 이동")}</span></div></div>;
 }

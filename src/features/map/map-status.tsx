@@ -1,5 +1,6 @@
 'use client';
 
+import {useT} from '@/lib/i18n';
 import {useEffect,useRef,useState} from 'react';
 import {ArrowUpRight,LoaderCircle,MessageCircle,TriangleAlert,X} from 'lucide-react';
 import './map-status.css';
@@ -12,6 +13,7 @@ type Props={
 };
 
 export function MapStatus({state,message,pendingHintPulse,onContinue}:Props){
+ const __t=useT();
   const [dismissed,setDismissed]=useState(false);
   const messageRef=useRef<HTMLSpanElement>(null);
   useEffect(()=>{
@@ -31,7 +33,7 @@ export function MapStatus({state,message,pendingHintPulse,onContinue}:Props){
       <span className="map-notice-icon" aria-hidden="true"><Icon size={15} strokeWidth={1.8}/></span>
       <span ref={messageRef}>{message}</span>
     </div>
-    {state!=='processing'&&<button className="map-notice-action" onClick={onContinue}>{state==='awaiting'?'답하기':'대화 확인'}<ArrowUpRight size={13}/></button>}
-    <button className="map-notice-close" aria-label="지도 상태 안내 닫기" onClick={()=>setDismissed(true)}><X size={15}/></button>
+    {state!=='processing'&&<button className="map-notice-action" onClick={onContinue}>{state==='awaiting'?__t("답하기"):__t("대화 확인")}<ArrowUpRight size={13}/></button>}
+    <button className="map-notice-close" aria-label={__t("지도 상태 안내 닫기")} onClick={()=>setDismissed(true)}><X size={15}/></button>
   </div>;
 }

@@ -2,6 +2,7 @@ import {NextResponse} from 'next/server';
 import {requestObject,withAIContext} from '@/lib/provider';
 import {MAX_INTAKE_ROUTES,normalizeIntake,type IntakePlan,type IntakeAnswer,type IntakeQuestion} from '@/lib/intake';
 import {INTAKE_INTERVIEW_PROMPT,legalIntakeContext} from '@/lib/intake-strategy';
+import {localeInstruction,legalLookupText} from '@/lib/locale-instructions';
 
 export const runtime='nodejs';
 export const maxDuration=30;
@@ -36,12 +37,13 @@ function readPlan(value:unknown,original:string):IntakePlan|undefined{
 export async function POST(request:Request){
  let data:Record<string,unknown>={};
  try{data=await request.json()}catch{return NextResponse.json({error:'요청 내용을 읽지 못했어요.'},{status:400})}
+ const locale=data.locale==='en'?'en':'ko';
  const message=cap(data.message,7000);
  if(!message)return NextResponse.json({error:'먼저 사건 내용을 알려주세요.'},{status:400});
  const prior=readPlan(data.plan,message);
  if(prior&&prior.answers.length<prior.questions.length)return NextResponse.json({error:'현재 질문에 답한 뒤 진행해주세요.'},{status:400});
- if(prior&&prior.answers.length>=3)return NextResponse.json({plan:normalizeIntake({done:true},message,prior),mode:'complete'});
- const legalNotes=legalIntakeContext(message+' '+(prior?.answers||[]).map(a=>a.choice+' '+a.detail).join(' '));
+ if(prior&&prior.answers.length>=3)return NextResponse.json({plan:normalizeIntake({done:true},message,prior,locale),mode:'complete'});
+ const legalNotes=legalIntakeContext(legalLookupText(message+' '+(prior?.answers||[]).map(a=>a.choice+' '+a.detail).join(' '),locale));
  let raw:Record<string,unknown>={};
  let fallback=false;
  try{
@@ -49,7 +51,8 @@ export async function POST(request:Request){
   raw=await withAIContext({
    modelId:cap(data.modelId,150)||undefined,
    signal
-  },()=>requestObject(INTAKE_INTERVIEW_PROMPT,JSON.stringify({
+  },()=>requestObject(INTAKE_INTERVIEW_PROMPT+localeInstruction(locale),JSON.stringify({
+   locale,
    currentDate:new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'}),
    originalStory:message,
    alreadyAsked:prior?.questions||[],
@@ -59,6 +62,6 @@ export async function POST(request:Request){
    instruction:prior?'직전 답변으로 쟁점이 달라졌는지 판단해 다음 한 개 질문과 수정된 임시 경로를 제시하세요. 두 개의 질문에 이미 답했고 핵심 분기가 충분하면 done=true로 마무리하세요.':'처음 받은 이야기에서 이미 알려진 사실을 제외하고 핵심 법적 분기를 가장 많이 바꿀 첫 질문을 제시하세요.'
   }),1250));
  }catch{fallback=true}
- const plan=normalizeIntake(raw,message,prior);
+ const plan=normalizeIntake(raw,message,prior,locale);
  return NextResponse.json({plan,mode:fallback?'fallback':'model'},{headers:{'Cache-Control':'no-store'}});
 }
