@@ -8,6 +8,7 @@ import {isPortfolioCapture} from '@/lib/portfolio-capture';
 import {SHOWCASE_STORY,SHOWCASE_DURATIONS,SHOWCASE_SCENES,showcaseCase,showcasePhase} from '@/lib/portfolio-showcase';
 import {EXAMPLE_DELAY_MS,presetForStory,examplePlan,nextExamplePlan,exampleResult,type ExamplePreset} from '@/lib/example-fast';
 import {limitCaseTitle,summarizeCaseTitle} from '@/lib/case-title';
+import {isSavedConversation} from '@/lib/conversation-history';
 import {expandRoadmap,revealedCount} from '@/lib/scenario-graph';
 import {normalizeSavedRoadmapTerms} from '@/lib/legal-procedure-terms';
 import type {ModelInventory} from '@/lib/model-types';
@@ -166,7 +167,7 @@ export function useLegalWorkspace(){
     const savedPreview=JSON.parse(localStorage.getItem(storageKey(PREVIEW_STORE))||'null');
     if(savedPreview?.id===demo.id&&Array.isArray(savedPreview.nodes))setPreviewCase(savedPreview);
     const parsed=JSON.parse(localStorage.getItem(storageKey(STORE))||'[]');
-    const restored:LegalCase[]=Array.isArray(parsed)?parsed.filter(x=>x&&typeof x.id==='string'&&(!x.demo||x.examplePreset==='wage-fast'||x.examplePreset==='deposit-fast'||x.examplePreset==='police-fast')).slice(0,50).map(x=>{const oldName=typeof x.name==='string'?x.name:'새 대화';const firstMessage=Array.isArray(x.messages)?x.messages.find((m:Message)=>m.role==='user')?.content:'';return normalizeSavedRoadmapTerms({...x,name:locale==='en'?englishCaseTitle(__t(oldName.endsWith('…')&&firstMessage?firstMessage:oldName)):summarizeCaseTitle(oldName.endsWith('…')&&firstMessage?firstMessage:oldName)});}):[];
+    const restored:LegalCase[]=Array.isArray(parsed)?parsed.filter(x=>x&&typeof x.id==='string'&&isSavedConversation(x)).slice(0,50).map(x=>{const oldName=typeof x.name==='string'?x.name:'새 대화';const firstMessage=Array.isArray(x.messages)?x.messages.find((m:Message)=>m.role==='user')?.content:'';return normalizeSavedRoadmapTerms({...x,name:locale==='en'?englishCaseTitle(__t(oldName.endsWith('…')&&firstMessage?firstMessage:oldName)):summarizeCaseTitle(oldName.endsWith('…')&&firstMessage?firstMessage:oldName)});}):[];
     const savedFoldIds=JSON.parse(localStorage.getItem(storageKey(AUTO_FOLD_KEY))||'[]');
     autoFoldedCases.current=new Set([...(Array.isArray(savedFoldIds)?savedFoldIds.filter((id:unknown):id is string=>typeof id==='string'):[]),...restored.filter(c=>c.nodes.length>0&&!c.intake).map(c=>c.id)]);
     if(!restored.length){const first=blank(locale);setCases([first]);setActiveId(first.id)}
@@ -227,9 +228,15 @@ export function useLegalWorkspace(){
   localStorage.setItem(storageKey('legal-preferred-model'),inventory.defaultId);
   localStorage.setItem(migrationKey,'complete');
  },[hydrated,inventory]);
- useEffect(()=>{if(hydrated&&!captureMode.current)localStorage.setItem(storageKey(STORE),JSON.stringify(cases))},[cases,hydrated]);
+ useEffect(()=>{
+  if(!hydrated||captureMode.current)return;
+  const saved=cases.filter(isSavedConversation);
+  if(saved.length)localStorage.setItem(storageKey(STORE),JSON.stringify(saved));
+  else localStorage.removeItem(storageKey(STORE));
+  if(activeId&&saved.some(item=>item.id===activeId))localStorage.setItem(storageKey(ACTIVE),activeId);
+  else localStorage.removeItem(storageKey(ACTIVE));
+ },[cases,activeId,hydrated]);
  useEffect(()=>{if(hydrated&&!captureMode.current)localStorage.setItem(storageKey(PREVIEW_STORE),JSON.stringify(previewCase))},[previewCase,hydrated]);
- useEffect(()=>{if(hydrated&&!captureMode.current){activeId?localStorage.setItem(storageKey(ACTIVE),activeId):localStorage.removeItem(storageKey(ACTIVE))}},[activeId,hydrated]);
  useEffect(()=>{if(hydrated&&!captureMode.current)localStorage.setItem(storageKey(THEMESTORE),theme)},[theme,hydrated]);
  useEffect(()=>{if(hydrated&&!captureMode.current&&preferredModel)localStorage.setItem(storageKey('legal-preferred-model'),preferredModel)},[preferredModel,hydrated]);
  useEffect(()=>{if(!active?.messages.length&&!busy)return;const list=bottomRef.current?.closest('.conversation-list');if(list)list.scrollTo({top:list.scrollHeight,behavior:'smooth'});},[activeId,active?.messages.length,busy]);
@@ -459,7 +466,7 @@ export function useLegalWorkspace(){
  const flowIds=focusedRoute?[focusedRoute.id,...expanded.nodes.filter(n=>n.scenarioParentId===focusedRoute.id&&n.kind==='step').map(n=>n.id),...expanded.nodes.filter(n=>n.scenarioParentId===focusedRoute.id&&n.kind==='outcome').map(n=>n.id)]:[];
  const flowPosition=Math.max(0,flowIds.indexOf(selected||focusId||''));
  const focusFlow=(direction:number)=>{const id=flowIds[flowPosition+direction];if(id){setSelected(null);setFocusId(id)}};
- const sorted=useMemo(()=>[...cases].sort((a,b)=>Date.parse(b.updatedAt)-Date.parse(a.updatedAt)),[cases]);
+ const sorted=useMemo(()=>cases.filter(isSavedConversation).sort((a,b)=>Date.parse(b.updatedAt)-Date.parse(a.updatedAt)),[cases]);
  const mapStatusText=active?.intake&&intakeHintCaseId===current.id
   ?'질문에 모두 답하면 각 경로의 절차를 확인할 수 있어요.'
   :busy

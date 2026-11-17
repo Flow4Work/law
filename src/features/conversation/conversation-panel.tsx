@@ -46,7 +46,7 @@ useEffect(()=>{
 },[pendingHintPulse,active?.intake]);
 return (
 <section className="conversation-panel" aria-label={__t("내 상황 이야기하기")}>
-       {historyOpen?<><div className="chat-top has-messages history-heading"><h1>{__t("대화 기록")}</h1><span>{sorted.length}{__t("개")}</span>{current.nodes.length>0&&<button className="chat-fold-toggle" type="button" onClick={()=>onCollapse()} title={__t("왼쪽 대화창 접기")} aria-label={__t("대화창 접기")}><PanelLeftClose size={17}/><span>{__t("대화 접기")}</span></button>}</div>
+       {historyOpen?<><div className="chat-top has-messages history-heading"><h1>{__t("대화 기록")}</h1><span>{sorted.length}{locale==='en'?(sorted.length===1?' chat':' chats'):'개'}</span>{current.nodes.length>0&&<button className="chat-fold-toggle" type="button" onClick={()=>onCollapse()} title={__t("왼쪽 대화창 접기")} aria-label={__t("대화창 접기")}><PanelLeftClose size={17}/><span>{__t("대화 접기")}</span></button>}</div>
        <div className="history-list" aria-label={__t("저장된 대화 목록")}>
          <div className="history-list-intro"><span>{__t("최근 대화")}</span><button type="button" onClick={newCase} disabled={busy}><Plus size={15}/>{__t("새 대화")}</button></div>
          {sorted.length===0&&<p className="history-empty">{__t("저장된 대화가 없어요. 새 대화를 시작해 보세요.")}</p>}

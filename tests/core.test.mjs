@@ -3,9 +3,20 @@ import assert from 'node:assert/strict';
 import {advanceStep,beginStep,completeStep,chooseNextStep} from '../src/lib/progress.ts';
 import {applyReview,findAnalysisIssues,naturalText,normalizeAnalysis} from '../src/lib/analysis.ts';
 import {reconcileIntakeResult} from '../src/lib/intake.ts';
+import {isSavedConversation} from '../src/lib/conversation-history.ts';
 
 const step=(id,status='possible')=>({id,title:id,description:'확인한 내용을 정리해요.',status,conditions:[],actions:[],documents:[],cost:'',duration:'',risks:[],sourceIds:[],next:[]});
 const scenario=(nodes,edges)=>({id:'test',name:'test',createdAt:'',updatedAt:'',messages:[],facts:[],sources:[],evidenceStatus:'unverified',nodes:nodes.map(n=>({...n,next:edges.filter(e=>e.source===n.id).map(e=>e.target)})),edges});
+
+test('saved conversations exclude blank drafts and built-in examples',()=>{
+ const blank=scenario([],[]);
+ const real={...blank,messages:[{role:'user',content:'A question'}]};
+ assert.equal(isSavedConversation(blank),false);
+ assert.equal(isSavedConversation({...real,demo:true,examplePreset:'wage-fast'}),false);
+ assert.equal(isSavedConversation({...real,examplePreset:'deposit-fast'}),false);
+ assert.equal(isSavedConversation({...real,examplePreset:undefined,demo:false}),true);
+ assert.equal(isSavedConversation(scenario([step('draft-map')],[])),true);
+});
 
 test('explicit completion records only the completed step and leaves its successor untouched',()=>{
  const value=scenario([step('a','current'),step('b')],[{source:'a',target:'b'}]);
