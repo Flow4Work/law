@@ -16,6 +16,7 @@ type Props={
 
 export function ModelPicker({inventory,value,disabled=false,onChange,onManage}:Props){
  const __t=useT();
+  const providerLabel=(id:string)=>__t(providerName(id));
   const [open,setOpen]=useState(false);
   const [query,setQuery]=useState('');
   const root=useRef<HTMLDivElement>(null);
@@ -25,9 +26,9 @@ export function ModelPicker({inventory,value,disabled=false,onChange,onManage}:P
   const id=useId();
   const models=inventory?.models||[];
   const current=models.find(model=>model.id===value);
-  const shortLabel=composerModelLabel(current);
-  const filtered=models.filter(model=>(model.name+' '+model.model+' '+providerName(model.provider)).toLowerCase().includes(query.trim().toLowerCase()));
-  const groups=Array.from(new Set(filtered.map(model=>providerName(model.provider))));
+  const shortLabel=__t(composerModelLabel(current));
+  const filtered=models.filter(model=>(model.name+' '+model.model+' '+providerLabel(model.provider)).toLowerCase().includes(query.trim().toLowerCase()));
+  const groups=Array.from(new Set(filtered.map(model=>providerLabel(model.provider))));
   const close=()=>{setOpen(false);trigger.current?.focus()};
 
   // Native popovers keep the workspace theme while escaping the composer's
@@ -96,10 +97,10 @@ export function ModelPicker({inventory,value,disabled=false,onChange,onManage}:P
       <div className="model-picker-heading">{__t("답변 모델")}</div>
       <label className="model-picker-search"><Search size={15}/><input ref={search} type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder={__t("모델 검색")} aria-label={__t("답변 모델 검색")}/></label>
       <div className="model-picker-options" role="listbox" aria-label={__t("답변 모델 목록")}>
-        {groups.map(group=><div key={group} role="group" aria-label={group}><div className="model-picker-group">{group}</div>{filtered.filter(model=>providerName(model.provider)===group).map(model=>{
+        {groups.map(group=><div key={group} role="group" aria-label={group}><div className="model-picker-group">{group}</div>{filtered.filter(model=>providerLabel(model.provider)===group).map(model=>{
           const selected=model.id===current?.id;
           return <button key={model.id} type="button" className={'model-picker-option '+(selected?'selected':'')} role="option" aria-selected={selected} disabled={!model.available} onClick={()=>{onChange(model.id);close()}}>
-            <span><strong>{model.name}</strong><small>{model.available?providerName(model.provider):__t(model.reason||'')||providerName(model.provider)+__t(" · 연결 확인 필요")}</small></span>
+            <span><strong>{model.name}</strong><small>{model.available?providerLabel(model.provider):__t(model.reason||'')||providerLabel(model.provider)+__t(" · 연결 확인 필요")}</small></span>
             {selected&&<Check size={16}/>}
           </button>;
         })}</div>)}

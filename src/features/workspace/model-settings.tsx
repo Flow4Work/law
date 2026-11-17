@@ -48,6 +48,7 @@ function Pages({page,total,onPage}:{page:number;total:number;onPage:(n:number)=>
 
 export function ModelSettings({inventory,currentModelId,initialProvider,onClose,onChanged}:Props){
  const __t=useT();
+ const providerLabel=(id:string)=>__t(providerName(id));
  const dialog=useRef<HTMLDialogElement>(null);
  const modelListRef=useRef<HTMLDivElement>(null);
  const readOnly=inventory?.readOnly===true;
@@ -88,7 +89,7 @@ export function ModelSettings({inventory,currentModelId,initialProvider,onClose,
  const chosenConnection=connections.find(m=>connectionRoot(m)===connectionId)||connections[0];
  const isReuse=mode==='reuse'&&Boolean(chosenConnection);
  const availableCount=models.filter(m=>m.available).length;
- const filteredModels=models.filter(m=>(m.name+' '+m.model+' '+providerName(m.provider)).toLowerCase().includes(search.trim().toLowerCase()))
+ const filteredModels=models.filter(m=>(m.name+' '+m.model+' '+providerLabel(m.provider)).toLowerCase().includes(search.trim().toLowerCase()))
   .sort((a,b)=>Number(b.id===current?.id)-Number(a.id===current?.id));
  const filteredCatalog=catalog.filter(m=>(m.name+' '+m.id).toLowerCase().includes(catalogSearch.trim().toLowerCase()));
  const catalogPageCount=Math.max(1,Math.ceil(filteredCatalog.length/4));
@@ -238,7 +239,7 @@ export function ModelSettings({inventory,currentModelId,initialProvider,onClose,
    {tab==='select'?<section className="lm-choose" id="lm-panel-select" role="tabpanel" aria-labelledby="lm-tab-select">
     <div className="lm-active">
      <div className="lm-active-icon"><Check size={17}/></div>
-     <div className="lm-active-copy"><span>{__t("현재 사용 중인 모델")}</span><strong>{current?.name||__t("연결된 모델 없음")}</strong><small>{current?providerName(current.provider):__t("먼저 모델을 연결해주세요.")}</small></div>
+     <div className="lm-active-copy"><span>{__t("현재 사용 중인 모델")}</span><strong>{current?.name||__t("연결된 모델 없음")}</strong><small>{current?providerLabel(current.provider):__t("먼저 모델을 연결해주세요.")}</small></div>
      <button type="button" onClick={refresh} disabled={action!==null} className="lm-outline-btn"><RefreshCw size={15} className={action==='refresh'?'spin':''}/> {__t("연결 확인")}</button>
     </div>
     <div className="lm-list-heading"><strong>{__t("모델 선택")} <span>{availableCount}{__t("개 사용 가능 · 선택 후 확인")}</span></strong></div>
@@ -247,7 +248,7 @@ export function ModelSettings({inventory,currentModelId,initialProvider,onClose,
      {filteredModels.map(m=><article className={'lm-model '+(m.id===candidate?'lm-model-current':'')+(!m.available?' lm-model-disabled':'')} key={m.id}>
       <button type="button" className="lm-model-choice" role="radio" disabled={!m.available||action!==null} aria-checked={m.id===candidate} onClick={()=>setCandidate(m.id)}>
        <span className="lm-indicator">{m.id===candidate&&<Check size={12}/>}</span>
-       <span className="lm-model-info"><strong title={m.name}>{m.name}</strong><small title={m.model}>{providerName(m.provider)} · {m.model}</small></span>
+       <span className="lm-model-info"><strong title={m.name}>{m.name}</strong><small title={m.model}>{providerLabel(m.provider)} · {m.model}</small></span>
        {m.id===current?.id&&<span className="lm-in-use">{__t("사용 중")}</span>}
       </button>
       <button type="button" className="lm-test" disabled={!m.available||action!==null||testing!==null} aria-label={m.name+__t(" 응답 확인")} title={__t("모델 응답 확인")} onClick={()=>test(m.id)}>{testing===m.id?<LoaderCircle className="spin" size={15}/>:<RefreshCw size={15}/>}</button>
@@ -271,20 +272,20 @@ export function ModelSettings({inventory,currentModelId,initialProvider,onClose,
      {showingManaged.map(c=><article className={'lm-managed '+(expandedConnection===connectionRoot(c)?'lm-managed-open':'')} key={connectionRoot(c)}>
       <div className="lm-managed-row">
        <span className="lm-service-symbol"><Server size={17}/></span>
-       <div className="lm-managed-copy"><strong>{providerName(c.provider)}{!c.available?__t(" · 사용 불가"):''}</strong><small title={c.model}>{c.model}</small></div>
+       <div className="lm-managed-copy"><strong>{providerLabel(c.provider)}{!c.available?__t(" · 사용 불가"):''}</strong><small title={c.model}>{c.model}</small></div>
        {deletePending===connectionRoot(c)?<div className="lm-delete-actions"><span>{__t("연결을 삭제할까요?")}</span><button type="button" disabled={action!==null} onClick={()=>setDeletePending('')}>{__t("취소")}</button><button type="button" className="lm-danger-confirm" disabled={action!==null} onClick={()=>remove(c)}>{action==='delete'?__t("삭제 중"):__t("삭제")}</button></div>
        :<div className="lm-managed-actions">
         <button type="button" className="lm-dropdown-trigger" aria-expanded={expandedConnection===connectionRoot(c)} disabled={action!==null||Boolean(connectionLoading&&connectionLoading!==connectionRoot(c))} onClick={()=>switchConnection(c)}>
          {connectionLoading===connectionRoot(c)?<LoaderCircle size={14} className="spin"/>:expandedConnection===connectionRoot(c)?<ChevronUp size={15}/>:<ChevronDown size={15}/>} {__t("모델 변경")}
         </button>
-        <button type="button" className="lm-delete" aria-label={providerName(c.provider)+__t(" 연결 삭제")} disabled={action!==null} onClick={()=>{setExpandedConnection('');setDeletePending(connectionRoot(c))}}><Trash2 size={16}/></button>
+        <button type="button" className="lm-delete" aria-label={providerLabel(c.provider)+__t(" 연결 삭제")} disabled={action!==null} onClick={()=>{setExpandedConnection('');setDeletePending(connectionRoot(c))}}><Trash2 size={16}/></button>
        </div>}
       </div>
       {expandedConnection===connectionRoot(c)&&<div className="lm-inline-picker">
        <div className="lm-inline-caption"><span>{__t("변경할 모델")}</span><small>{__t("선택만으로는 변경되지 않습니다.")}</small></div>
        {connectionLoading===connectionRoot(c)?<div className="lm-inline-loading"><LoaderCircle size={15} className="spin"/> {__t("모델을 확인하고 있어요.")}</div>:
-        <><label className="lm-search"><Search size={16}/><input type="search" aria-label={providerName(c.provider)+__t(" 모델 검색")} placeholder={__t("모델 이름 또는 ID 검색")} value={connectionSearch} onChange={e=>setConnectionSearch(e.target.value)}/></label>
-        <div className="lm-inline-options" role="radiogroup" aria-label={providerName(c.provider)+__t(" 모델 목록")}>
+        <><label className="lm-search"><Search size={16}/><input type="search" aria-label={providerLabel(c.provider)+__t(" 모델 검색")} placeholder={__t("모델 이름 또는 ID 검색")} value={connectionSearch} onChange={e=>setConnectionSearch(e.target.value)}/></label>
+        <div className="lm-inline-options" role="radiogroup" aria-label={providerLabel(c.provider)+__t(" 모델 목록")}>
          {(connectionCatalog[connectionRoot(c)]||[]).filter(item=>(item.name+' '+item.id).toLowerCase().includes(connectionSearch.toLowerCase())).slice(0,80).map(item=>
           <button type="button" key={item.id} role="radio" aria-checked={connectionSelected===item.id} className={'lm-inline-option '+(connectionSelected===item.id?'lm-inline-option-active':'')} onClick={()=>setConnectionSelected(item.id)} disabled={action!==null}>
            <span className="lm-indicator">{connectionSelected===item.id&&<Check size={11}/>}</span><span><strong>{item.name}</strong><small>{item.id}</small></span>
@@ -306,7 +307,7 @@ export function ModelSettings({inventory,currentModelId,initialProvider,onClose,
      <div className="lm-step-title"><strong>{__t("서비스 선택")}</strong></div>
      <div className="lm-service-list" aria-label={__t("API 서비스")} onKeyDown={arrowKeys}>
       {services.filter(s=>!inventory?.browserScoped||s.id!=='local').map(s=><button key={s.id} type="button" className={'lm-service '+(s.id===provider?'lm-service-active':'')} aria-pressed={provider===s.id} disabled={action!==null} onClick={()=>swapProvider(s.id)}>
-       <span><strong>{s.label}</strong><small>{__t(s.caption)}</small></span>{s.id===provider&&<Check size={15}/>}
+       <span><strong>{__t(s.label)}</strong><small>{__t(s.caption)}</small></span>{s.id===provider&&<Check size={15}/>}
       </button>)}
      </div>
      <div className="lm-left-note"><ShieldCheck size={14}/>{inventory?.browserScoped?__t("내 API 키는 이 브라우저에 암호화해 보관합니다."):__t("API 키는 서버에 암호화해 저장합니다.")}</div>
@@ -314,7 +315,7 @@ export function ModelSettings({inventory,currentModelId,initialProvider,onClose,
     <div className="lm-add-right">
      <div className="lm-step-title"><strong>{catalogLoaded?__t("사용할 모델 선택"):__t("API 키 연결")}</strong></div>
      {!catalogLoaded?<div className="lm-connect-form">
-      <div className="lm-selected-api"><span>{__t("새 API 연결")}</span><strong>{providerName(provider)}</strong><small>{provider==='local'?__t("로컬 모델 서버가 실행 중이어야 합니다."):__t("키를 입력한 후 사용할 모델을 선택하세요.")}</small></div>
+      <div className="lm-selected-api"><span>{__t("새 API 연결")}</span><strong>{providerLabel(provider)}</strong><small>{provider==='local'?__t("로컬 모델 서버가 실행 중이어야 합니다."):__t("키를 입력한 후 사용할 모델을 선택하세요.")}</small></div>
       {<div className="lm-fields">
        {provider!=='openrouter'&&provider!=='bai'&&provider!=='gemini'&&provider!=='opencode'&&<label>{__t("API 주소")}<input type="url" autoComplete="off" value={baseUrl} disabled={action!==null} placeholder="https://api.example.com/v1" onChange={e=>{setBaseUrl(e.target.value);resetCatalog()}}/></label>}
        {provider!=='local'&&<label>{__t("API 키")}<input type="password" autoComplete="new-password" placeholder={__t("API 키를 입력하세요")} value={apiKey} disabled={action!==null} onChange={e=>{setApiKey(e.target.value);resetCatalog()}}/></label>}
@@ -322,7 +323,7 @@ export function ModelSettings({inventory,currentModelId,initialProvider,onClose,
       <div className="lm-connection-explanation"><KeyRound size={16}/><span>{__t("선택한 서비스의 사용 가능한 모델 목록을 확인합니다.")}</span></div>
       <button type="button" className="lm-fetch" disabled={action!==null||(!isReuse&&((provider!=='local'&&provider!=='opencode'&&!apiKey.trim())||!baseUrl.trim()))} onClick={fetchCatalog}>{action==='catalog'?<LoaderCircle className="spin" size={17}/>:<RefreshCw size={17}/>} {action==='catalog'?__t("모델 목록 확인 중"):__t("모델 목록 불러오기")}</button>
      </div>:<div className="lm-catalog-stage">
-      <div className="lm-catalog-meta"><span>{providerName(provider)} · {filteredCatalog.length.toLocaleString()}{__t("개 모델")}</span><button type="button" disabled={action!==null} onClick={()=>setCatalogLoaded(false)}><ArrowLeft size={14}/> {__t("연결 변경")}</button></div>
+      <div className="lm-catalog-meta"><span>{providerLabel(provider)} · {filteredCatalog.length.toLocaleString()}{__t("개 모델")}</span><button type="button" disabled={action!==null} onClick={()=>setCatalogLoaded(false)}><ArrowLeft size={14}/> {__t("연결 변경")}</button></div>
       <label className="lm-search"><Search size={17}/><input type="search" aria-label={__t("추가할 모델 검색")} value={catalogSearch} onChange={e=>{setCatalogSearch(e.target.value);setCatalogPage(0)}} placeholder={__t("모델 이름 또는 ID 검색")}/></label>
       {showingCatalog.length?<div className="lm-catalog-list" role="radiogroup" aria-label={__t("추가할 모델")} onKeyDown={arrowKeys}>
        {showingCatalog.map(item=><button key={item.id} type="button" className={'lm-catalog-item '+(selectedCatalog===item.id?'lm-catalog-chosen':'')} role="radio" aria-checked={selectedCatalog===item.id} disabled={action!==null} onClick={()=>setSelectedCatalog(item.id)}>
