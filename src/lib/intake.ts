@@ -9,7 +9,7 @@ export type IntakePlan={
  original:string; questions:IntakeQuestion[]; routes:IntakeRoute[]; answers:IntakeAnswer[];
  complete?:boolean; facts?:string[]; missing?:string[];
 };
-export function recordIntakeAnswer(value:LegalCase,answer:IntakeAnswer):LegalCase|null{
+export function recordIntakeAnswer(value:LegalCase,answer:IntakeAnswer,translateChoice=(value:string)=>value):LegalCase|null{
  const plan=value.intake;
  const index=plan?.answers.length??0;
  const question=plan?.questions[index];
@@ -19,8 +19,8 @@ export function recordIntakeAnswer(value:LegalCase,answer:IntakeAnswer):LegalCas
  const answerId=`${value.id}:intake:${index}:answer`;
  return {...value,updatedAt:createdAt,intake:{...plan,answers:[...plan.answers,answer]},messages:[
   ...value.messages.filter(message=>message.id!==questionId&&message.id!==answerId),
-  {id:questionId,role:'assistant',content:question.question,createdAt},
-  {id:answerId,role:'user',content:[answer.choice.trim(),answer.detail.trim()].filter(Boolean).join('\n'),createdAt}
+  {id:questionId,role:'assistant',content:translateChoice(question.question),createdAt},
+  {id:answerId,role:'user',content:[translateChoice(answer.choice.trim()),answer.detail.trim()].filter(Boolean).join('\n'),createdAt}
  ]};
 }
 const str=(value:unknown,max=180)=>typeof value==='string'?value.trim().slice(0,max):'';

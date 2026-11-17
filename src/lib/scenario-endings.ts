@@ -25,6 +25,8 @@ export function completionText(outcome:ScenarioOutcome):string{
 export function matchingTransitions(outcome:ScenarioOutcome,transitions:ScenarioTransition[]):ScenarioTransition[]{
  const left=(outcome.title+' '+(outcome.condition||'')).replace(/\s/g,'');
  const matches=(transition:ScenarioTransition)=>{
+  const condition=outcome.condition?.trim();
+  if(condition&&/[a-z]/i.test(condition)&&!/[가-힣]/.test(condition)&&condition.toLowerCase()===transition.condition.trim().toLowerCase())return true;
   const right=(transition.condition+' '+(transition.label||'')).replace(/\s/g,'');
   const negative=/이의(?:신청)?(?:가|를|을)?(?:없|않)|이의없이|이의하지않/.test(left);
   const success=/(성립|합의완료|전액지급|전액회수|지급완료|회수완료)/.test(left);

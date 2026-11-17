@@ -1,5 +1,5 @@
 'use client';
-import {useT} from '@/lib/i18n';
+import {useLocale,useT} from '@/lib/i18n';
 import {useEffect,useState} from 'react';
 import {Check,Clock3,LoaderCircle,GitBranch} from 'lucide-react';
 export type AnalysisProgressState={phase:string;message:string;retryIn?:number};
@@ -35,6 +35,7 @@ const activityByPhase:Record<string,string[]>={
 };
 export function AnalysisProgress({progress,onCancel,onShowMap}:{progress:AnalysisProgressState;onCancel:()=>void;onShowMap?:()=>void}){
  const __t=useT();
+ const locale=useLocale();
  const [elapsed,setElapsed]=useState(0);useEffect(()=>{const start=Date.now();const timer=setInterval(()=>setElapsed(Math.floor((Date.now()-start)/1000)),1000);return()=>clearInterval(timer)},[]);
  const phase=progress.phase==='sources'?1:['reviewing','formatting'].includes(progress.phase)?2:0;
  const activityList=activityByPhase[progress.phase]||activityByPhase.analyzing;
@@ -45,25 +46,26 @@ export function AnalysisProgress({progress,onCancel,onShowMap}:{progress:Analysi
   <span className="assistant-icon"><GitBranch size={17} aria-hidden="true"/></span>
   <div className="analysis-progress">
    <div className="progress-status" role="status" aria-live="polite" aria-atomic="true">
-    <div className="progress-title"><span className="progress-symbol"><LoaderCircle className="spin" size={17} aria-hidden="true"/></span><strong>{title}</strong></div>
-    <p>{progress.message}</p>
+    <div className="progress-title"><span className="progress-symbol"><LoaderCircle className="spin" size={17} aria-hidden="true"/></span><strong>{__t(title)}</strong></div>
+    <p>{__t(progress.message)}</p>
    </div>
    <div className="progress-activity" aria-label={__t("현재 검토 중인 내용")}>
     <span className="progress-activity-bars" aria-hidden="true"><i/><i/><i/></span>
-    <span className="progress-activity-copy" key={progress.phase+':'+activityIndex}>{activityList[activityIndex]}</span>
+    <span className="progress-activity-copy" key={progress.phase+':'+activityIndex}>{__t(activityList[activityIndex])}</span>
    </div>
    <ol className="progress-steps" aria-label={__t("답변 준비 단계")}>
-    {steps.map((step,i)=><li className={i<phase?'finished':i===phase?'active':''} aria-label={i<phase?`${step} 완료`:step} aria-current={i===phase?'step':undefined} key={step}>
+    {steps.map((step,i)=><li className={i<phase?'finished':i===phase?'active':''} aria-label={i<phase?(locale==='en'?`${__t(step)} complete`:`${step} 완료`):__t(step)} aria-current={i===phase?'step':undefined} key={step}>
      <span className="progress-step-number" aria-hidden="true">{i<phase?<Check size={13}/>:i+1}</span>
-     <span>{step}</span>
+     <span>{__t(step)}</span>
     </li>)}
    </ol>
    <div className="progress-meta">
-    <span className="progress-elapsed" role="timer" aria-label={`경과 시간 ${elapsed}초`}><Clock3 size={14} aria-hidden="true"/>{elapsed}{__t("초 경과")}</span>
+    <span className="progress-elapsed" role="timer" aria-label={locale==='en'?`${elapsed} seconds elapsed`:`경과 시간 ${elapsed}초`}><Clock3 size={14} aria-hidden="true"/>{elapsed}{locale==='en'?' ':''}{__t("초 경과")}</span>
     <div className="progress-actions">{onShowMap&&<button type="button" className="progress-map" onClick={onShowMap}>{__t("지도 보기")}</button>}<button type="button" onClick={onCancel}>{__t("중지")}</button></div>
    </div>
   </div>
  </div>;
 }
 export function MapSkeleton(){
- const __t=useT();return <div className="map-skeleton" role="status" aria-label={__t("선택지 지도를 만들고 있어요")}><div className="skeleton-caption"><LoaderCircle className="spin" size={17}/><span>{__t("대화에 맞는 경로를 정리하고 있어요")}</span></div><div className="skeleton-graph desktop-skeleton" aria-hidden="true"><div className="skeleton-node skeleton-root"><i/><b/><span/><span/></div><div className="skeleton-connector"/><div className="skeleton-branches">{[0,1,2].map(i=><div className="skeleton-node" key={i}><i/><b/><span/><span/><em/></div>)}</div></div><div className="mobile-skeleton-graph" aria-hidden="true"><div className="mobile-skeleton-node root"><i/><b/><span/></div><div className="mobile-skeleton-caption">{__t("가능한 방법을 나누고 있어요")}</div>{[0,1,2].map(i=><div className="mobile-skeleton-node" key={i}><i/><b/><span/><span/></div>)}</div></div>}
+ const __t=useT();
+ const locale=useLocale();return <div className="map-skeleton" role="status" aria-label={__t("선택지 지도를 만들고 있어요")}><div className="skeleton-caption"><LoaderCircle className="spin" size={17}/><span>{__t("대화에 맞는 경로를 정리하고 있어요")}</span></div><div className="skeleton-graph desktop-skeleton" aria-hidden="true"><div className="skeleton-node skeleton-root"><i/><b/><span/><span/></div><div className="skeleton-connector"/><div className="skeleton-branches">{[0,1,2].map(i=><div className="skeleton-node" key={i}><i/><b/><span/><span/><em/></div>)}</div></div><div className="mobile-skeleton-graph" aria-hidden="true"><div className="mobile-skeleton-node root"><i/><b/><span/></div><div className="mobile-skeleton-caption">{__t("가능한 방법을 나누고 있어요")}</div>{[0,1,2].map(i=><div className="mobile-skeleton-node" key={i}><i/><b/><span/><span/></div>)}</div></div>}

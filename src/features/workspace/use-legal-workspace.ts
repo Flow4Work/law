@@ -17,7 +17,7 @@ import {previewIntake,recordIntakeAnswer,reconcileIntakeResult,intakeSummary,typ
 import type {AnalysisProgressState} from '@/features/shared/analysis-progress';
 import {useMobileLayout} from '@/features/shared/use-mobile-layout';
 import {recordActivity} from '@/lib/activity-client';
-import {useLocale,useT,type Language} from '@/lib/i18n';
+import {translate,useLocale,useT,type Language} from '@/lib/i18n';
 
 const STORE='ai-legal-roadmap-cases-v1';
 const ACTIVE='ai-legal-roadmap-active-v1';
@@ -25,7 +25,14 @@ const PREVIEW_STORE='ai-legal-roadmap-preview-v1';
 const THEMESTORE='ai-legal-roadmap-theme-v3';
 const AUTO_FOLD_KEY='ai-legal-roadmap-auto-folded-v1';
 const blank=(locale:Language='ko'):LegalCase=>({id:crypto.randomUUID(),name:locale==='en'?'New chat':'새 대화',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),messages:[],nodes:[],edges:[],facts:[],sources:[],evidenceStatus:'unverified'});
-const demo:LegalCase=CIVIL_DEMO;
+// Local examples use their original strings to match choices and conditional branches.
+function localizeExample<T>(value:T):T{
+ if(typeof value==='string')return translate(value,'en') as T;
+ if(Array.isArray(value))return value.map(localizeExample) as T;
+ if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([key,item])=>[key,localizeExample(item)])) as T;
+ return value;
+}
+const demo=CIVIL_DEMO;
 const waitFastExample=(signal:AbortSignal)=>new Promise<void>((resolve,reject)=>{
  if(signal.aborted){reject(new Error('cancelled'));return}
  const onAbort=()=>{clearTimeout(timer);reject(new Error('cancelled'))};
@@ -40,7 +47,7 @@ export function useLegalWorkspace(){
  const storageKey=(key:string)=>locale==='en'?'en:'+key:key;
  const mobile=useMobileLayout();
  const [cases,setCases]=useState<LegalCase[]>([]);
- const [previewCase,setPreviewCase]=useState<LegalCase>(locale==='en'?blank(locale):demo);
+ const [previewCase,setPreviewCase]=useState<LegalCase>(demo);
  const [showcaseStage,setShowcaseStage]=useState(-1);
  const [activeId,setActiveId]=useState<string|null>(null);
  const [hydrated,setHydrated]=useState(false);
@@ -91,14 +98,17 @@ export function useLegalWorkspace(){
    ?items.map(item=>item.modelId?.startsWith('env:bai:')&&!valid.has(item.modelId)?{...item,modelId:inventory.defaultId}:item)
    :items);
  },[hydrated,inventory]);
- const expanded=useMemo(()=>expandRoadmap(current),[current]);
- const mapCase=useMemo(()=>({...current,nodes:expanded.nodes,edges:expanded.edges}),[current,expanded]);
+ const expanded=useMemo(()=>expandRoadmap(current,__t),[current,__t]);
+ const mapCase=useMemo(()=>{
+  const data=locale==='en'&&current.demo?localizeExample(expanded):expanded;
+  return {...current,...data};
+ },[current,expanded,locale]);
  const showcaseSelection=activeId==='portfolio-showcase'?showcaseStage===13?'wage-request':showcaseStage===14||showcaseStage===15?'wage-labor':showcaseStage===16?'scenario:wage-labor:step:0':showcaseStage===17?'scenario:wage-labor:step:1':showcaseStage===18?'scenario:wage-labor:step:2':showcaseStage===19?'scenario:wage-labor:outcome:1':showcaseStage>=20?'scenario:wage-labor:outcome:0':null:null;
  const resolvedSelected=showcaseSelection||selected;
  const chosenRaw=mapCase.nodes.find(n=>n.id===resolvedSelected)||null;
  // 지도 노드는 그대로 두고, 하위 절차의 상세 보완 정보만 우측 패널에 덧씁니다.
  const supplement=chosenRaw?.scenarioParentId?current.detailSupplements?.[chosenRaw.id]:undefined;
- const chosen=chosenRaw?(supplement?{...chosenRaw,...supplement}:chosenRaw):null;
+ const chosen=chosenRaw?(supplement?{...chosenRaw,...(locale==='en'&&current.demo?localizeExample(supplement):supplement)}:chosenRaw):null;
  const selectNode=(id:string)=>{
   if(active?.intake){if(mapCase.nodes.some(n=>n.id===id))setIntakeHintCaseId(current.id);return}
   if(busy)return;
@@ -149,14 +159,14 @@ export function useLegalWorkspace(){
    setCases([showcaseCase(start)]);setActiveId('portfolio-showcase');setTheme('light');setChatCollapsed(false);setHydrated(true);return;
   }
   if(captureMode.current){
-   setCases([]);setActiveId(null);setPreviewCase(locale==='en'?blank(locale):structuredClone(demo));
+   setCases([]);setActiveId(null);setPreviewCase(structuredClone(demo));
    setTheme('light');setChatCollapsed(true);setHydrated(true);return;
   }
   try{
     const savedPreview=JSON.parse(localStorage.getItem(storageKey(PREVIEW_STORE))||'null');
     if(savedPreview?.id===demo.id&&Array.isArray(savedPreview.nodes))setPreviewCase(savedPreview);
     const parsed=JSON.parse(localStorage.getItem(storageKey(STORE))||'[]');
-    const restored:LegalCase[]=Array.isArray(parsed)?parsed.filter(x=>x&&typeof x.id==='string'&&(!x.demo||x.examplePreset==='wage-fast'||x.examplePreset==='deposit-fast'||x.examplePreset==='police-fast')).slice(0,50).map(x=>{const oldName=typeof x.name==='string'?x.name:'새 대화';const firstMessage=Array.isArray(x.messages)?x.messages.find((m:Message)=>m.role==='user')?.content:'';return normalizeSavedRoadmapTerms({...x,name:locale==='en'?englishCaseTitle(oldName.endsWith('…')&&firstMessage?firstMessage:oldName):summarizeCaseTitle(oldName.endsWith('…')&&firstMessage?firstMessage:oldName)});}):[];
+    const restored:LegalCase[]=Array.isArray(parsed)?parsed.filter(x=>x&&typeof x.id==='string'&&(!x.demo||x.examplePreset==='wage-fast'||x.examplePreset==='deposit-fast'||x.examplePreset==='police-fast')).slice(0,50).map(x=>{const oldName=typeof x.name==='string'?x.name:'새 대화';const firstMessage=Array.isArray(x.messages)?x.messages.find((m:Message)=>m.role==='user')?.content:'';return normalizeSavedRoadmapTerms({...x,name:locale==='en'?englishCaseTitle(__t(oldName.endsWith('…')&&firstMessage?firstMessage:oldName)):summarizeCaseTitle(oldName.endsWith('…')&&firstMessage?firstMessage:oldName)});}):[];
     const savedFoldIds=JSON.parse(localStorage.getItem(storageKey(AUTO_FOLD_KEY))||'[]');
     autoFoldedCases.current=new Set([...(Array.isArray(savedFoldIds)?savedFoldIds.filter((id:unknown):id is string=>typeof id==='string'):[]),...restored.filter(c=>c.nodes.length>0&&!c.intake).map(c=>c.id)]);
     if(!restored.length){const first=blank(locale);setCases([first]);setActiveId(first.id)}
@@ -221,7 +231,7 @@ export function useLegalWorkspace(){
  useEffect(()=>{if(hydrated&&!captureMode.current)localStorage.setItem(storageKey(PREVIEW_STORE),JSON.stringify(previewCase))},[previewCase,hydrated]);
  useEffect(()=>{if(hydrated&&!captureMode.current){activeId?localStorage.setItem(storageKey(ACTIVE),activeId):localStorage.removeItem(storageKey(ACTIVE))}},[activeId,hydrated]);
  useEffect(()=>{if(hydrated&&!captureMode.current)localStorage.setItem(storageKey(THEMESTORE),theme)},[theme,hydrated]);
- useEffect(()=>{if(hydrated&&!captureMode.current&&preferredModel)localStorage.setItem('legal-preferred-model',preferredModel)},[preferredModel,hydrated]);
+ useEffect(()=>{if(hydrated&&!captureMode.current&&preferredModel)localStorage.setItem(storageKey('legal-preferred-model'),preferredModel)},[preferredModel,hydrated]);
  useEffect(()=>{if(!active?.messages.length&&!busy)return;const list=bottomRef.current?.closest('.conversation-list');if(list)list.scrollTo({top:list.scrollHeight,behavior:'smooth'});},[activeId,active?.messages.length,busy]);
  useEffect(()=>{if(activeId==='portfolio-showcase')return;setSelected(null);setFocusId(null);setIntakeHintCaseId(null);setChatCollapsed(captureMode.current&&!new URLSearchParams(window.location.search).has('showcase'))},[activeId]);
  // Fold once per conversation only after the first completed map, never on provisional intake or later refreshes.
@@ -288,11 +298,11 @@ export function useLegalWorkspace(){
  const submit=useCallback(async(value?:string,refresh=false,modelOverride?:string,snapshotOverride?:LegalCase,recordUserMessage=true)=>{
    const previous=snapshotOverride||active;
    const latestUser=previous?.messages.filter(m=>m.role==='user').slice(-1)[0]?.content;
-   const message=(refresh?(latestUser||'현재 상황과 진행 상태를 바탕으로 선택지를 다시 정리해 주세요.'):(value??input)).trim();if(!message||busyRef.current)return;
+   const message=(refresh?(latestUser||__t('현재 상황과 진행 상태를 바탕으로 선택지를 다시 정리해 주세요.')):(value??input)).trim();if(!message||busyRef.current)return;
    if(recordUserMessage)recordActivity(refresh?'map_update':'query',message);
    // Only explicitly clicked welcome examples are precomputed; manually typed messages use the AI route.
    const selectedPreset=wageExampleArmedRef.current;
-   if(!refresh&&selectedPreset&&presetForStory(message)===selectedPreset&&!previous?.messages.length&&!previous?.intake){
+   if(!refresh&&selectedPreset&&message===__t(examplePlan(selectedPreset).original)&&!previous?.messages.length&&!previous?.intake){
      wageExampleArmedRef.current=null;setWageExampleArmed(false);
      const controller=new AbortController();const version=++requestVersion.current;
      requestAbort.current=controller;busyRef.current=true;setBusy(true);
@@ -301,7 +311,7 @@ export function useLegalWorkspace(){
      const createdAt=new Date().toISOString();
      const caseId=previous?.id||crypto.randomUUID();
      const presetNames:Record<ExamplePreset,string>={'wage-fast':'퇴사 후 임금체불 · 예시','deposit-fast':'보증금 반환 · 예시','police-fast':'경찰 출석 연락 · 예시'};
-     const start:LegalCase={...(previous||blank(locale)),id:caseId,demo:true,examplePreset:selectedPreset,name:presetNames[selectedPreset],updatedAt:createdAt,
+     const start:LegalCase={...(previous||blank(locale)),id:caseId,demo:true,examplePreset:selectedPreset,name:__t(presetNames[selectedPreset]),updatedAt:createdAt,
        messages:[{id:crypto.randomUUID(),role:'user',content:message,createdAt}],nodes:[],edges:[],facts:[],sources:[],intake:undefined};
      setCases(items=>items.some(c=>c.id===caseId)?items.map(c=>c.id===caseId?start:c):[...items,start]);
      setActiveId(caseId);
@@ -311,7 +321,7 @@ export function useLegalWorkspace(){
        const plan=examplePlan(selectedPreset);
        setCases(items=>items.map(c=>c.id===caseId?{...c,intake:plan,...previewIntake(plan,locale)}:c));
      }catch{
-       if(requestVersion.current===version)setCases(items=>items.map(c=>c.id===caseId?{...c,messages:[...c.messages,{id:crypto.randomUUID(),role:'assistant',content:'요청을 멈췄어요. 예시를 다시 시작할 수 있어요.',createdAt:new Date().toISOString()}]}:c));
+       if(requestVersion.current===version)setCases(items=>items.map(c=>c.id===caseId?{...c,messages:[...c.messages,{id:crypto.randomUUID(),role:'assistant',content:__t('요청을 멈췄어요. 예시를 다시 시작할 수 있어요.'),createdAt:new Date().toISOString()}]}:c));
      }finally{
        if(requestAbort.current===controller){requestAbort.current=null;busyRef.current=false;setBusy(false)}
      }
@@ -324,7 +334,7 @@ export function useLegalWorkspace(){
    setAnalysisProgress({phase:'analyzing',message:'이야기를 읽고 가능한 방법을 정리하고 있어요.'});
    setBusy(true);setSelected(null);setError('');if(!refresh)setInput('');
    const firstIntake=!refresh&&!snapshotOverride&&!previous?.intake&&!previous?.messages.some(m=>m.role==='user')&&!previous?.nodes.length;
-   const base={...(previous||blank()),modelId:effectiveModelId,demo:previous?.examplePreset?false:previous?.demo,examplePreset:undefined};
+   const base={...(previous||blank(locale)),modelId:effectiveModelId,demo:previous?.examplePreset?false:previous?.demo,examplePreset:undefined};
    const userMsg:Message={id:crypto.randomUUID(),role:'user',content:message,createdAt:new Date().toISOString()};
    const lastMessage=base.messages[base.messages.length-1];
    const retryMessages=refresh&&lastMessage?.role==='assistant'&&lastMessage.error?base.messages.slice(0,-1):base.messages;
@@ -363,13 +373,13 @@ export function useLegalWorkspace(){
      if(requestVersion.current!==version)return;
      const cancelled=controller.signal.aborted;
      const msg=cancelled?'요청을 멈췄어요. 대화와 기존 지도는 그대로 남아 있어요.':e instanceof Error?e.message:'연결 오류가 발생했어요.';
-     setCases(x=>x.map(c=>c.id===base.id?{...c,messages:[...c.messages,{id:crypto.randomUUID(),role:'assistant',content:msg,error:!cancelled,createdAt:new Date().toISOString()}]}:c));
+     setCases(x=>x.map(c=>c.id===base.id?{...c,messages:[...c.messages,{id:crypto.randomUUID(),role:'assistant',content:__t(msg),error:!cancelled,createdAt:new Date().toISOString()}]}:c));
    }finally{if(requestAbort.current===controller){requestAbort.current=null;busyRef.current=false;setBusy(false)}}
- },[active,input,busy,chosenModelId,inventory,locale]);
+ },[active,input,busy,chosenModelId,inventory,locale,__t]);
  const acceptIntakeAnswer=async(answer:IntakeAnswer)=>{
    if(!active?.intake||busy||busyRef.current)return;
    const originalCase=active;
-   const recorded=recordIntakeAnswer(active,answer);
+   const recorded=recordIntakeAnswer(active,answer,active.examplePreset?__t:undefined);
    if(!recorded?.intake)return;
    recordActivity('answer',[answer.choice,answer.detail].filter(Boolean).join(' · '));
    const plan=recorded.intake;
@@ -386,8 +396,8 @@ export function useLegalWorkspace(){
        await waitFastExample(controller.signal);
        if(requestVersion.current!==version||controller.signal.aborted)return;
        if(nextPlan.answers.length>=nextPlan.questions.length){
-         const result=exampleResult(active.examplePreset!,nextPlan);
-         const assistantMsg:Message={id:crypto.randomUUID(),role:'assistant',content:result.reply,createdAt:new Date().toISOString()};
+         const result=exampleResult(active.examplePreset!,nextPlan,locale==='en'?__t:undefined);
+         const assistantMsg:Message={id:crypto.randomUUID(),role:'assistant',content:__t(result.reply),createdAt:new Date().toISOString()};
          setCases(items=>items.map(c=>c.id===active.id?{...c,...result,intake:undefined,messages:[...next.messages,assistantMsg],updatedAt:new Date().toISOString()}:c));
        }else{
          setCases(items=>items.map(c=>c.id===active.id?{...c,intake:nextPlan,...previewIntake(nextPlan,locale)}:c));
@@ -400,12 +410,17 @@ export function useLegalWorkspace(){
      return;
    }
    // The API interview expects only questions already asked; a local preset knows all three in advance.
-   const apiPlan=recorded.examplePreset?{...plan,questions:plan.questions.slice(0,plan.answers.length)}:plan;
+   const apiPlan=recorded.examplePreset?{
+     ...plan,original:__t(plan.original),
+     questions:(locale==='en'?localizeExample(plan.questions):plan.questions).slice(0,plan.answers.length),
+     routes:locale==='en'?localizeExample(plan.routes):plan.routes,
+     answers:plan.answers.map(a=>({...a,choice:__t(a.choice)}))
+   }:plan;
    const next:LegalCase={...recorded,intake:apiPlan,demo:recorded.examplePreset?false:recorded.demo,examplePreset:undefined,...previewIntake(apiPlan,locale)};
    setIntakeHintCaseId(null);
    setCases(items=>items.map(c=>c.id===active.id?next:c));
    // A third answer completes the interview without an extra LLM round-trip.
-   if(plan.answers.length>=3){void submit(intakeSummary(plan,locale),false,undefined,next,false);return}
+   if(plan.answers.length>=3){void submit(intakeSummary(apiPlan,locale),false,undefined,next,false);return}
    const controller=new AbortController();const version=++requestVersion.current;
    requestAbort.current=controller;busyRef.current=true;setBusy(true);
    setAnalysisProgress({phase:'intake',message:'방금 알려주신 내용을 토대로 다음 핵심 쟁점을 살펴보고 있어요.'});
@@ -435,7 +450,7 @@ export function useLegalWorkspace(){
  const alternativeModel=inventory?.models.filter(model=>model.available&&model.id!==chosenModelId).sort((a,b)=>fallbackRank(a.provider,a.model,a.effort)-fallbackRank(b.provider,b.model,b.effort))[0];
  const retryWithAlternative=()=>{if(!alternativeModel)return;setPreferredModel(alternativeModel.id);if(active)setCases(values=>values.map(value=>value.id===active.id?{...value,modelId:alternativeModel.id}:value));void submit(undefined,true,alternativeModel.id)};
  const example=()=>{setSelected(null);setHistoryOpen(false);setActiveId(null);if(captureMode.current){setPreviewCase(structuredClone(demo));setFocusId(null);setChatCollapsed(true)}};
- const fillInput=(text:string)=>{recordActivity('example',text);const armed=!active?.messages.length?presetForStory(text):null;wageExampleArmedRef.current=armed;setWageExampleArmed(Boolean(armed));setInput(text);setSelected(null);setChatCollapsed(false);setMobileView('chat');requestAnimationFrame(()=>inputRef.current?.focus())};
+ const fillInput=(text:string)=>{recordActivity('example',__t(text));const armed=!active?.messages.length?presetForStory(text):null;wageExampleArmedRef.current=armed;setWageExampleArmed(Boolean(armed));setInput(__t(text));setSelected(null);setChatCollapsed(false);setMobileView('chat');requestAnimationFrame(()=>inputRef.current?.focus())};
  const changeInput=(text:string)=>{wageExampleArmedRef.current=null;setWageExampleArmed(false);setInput(text)};
  const done=current.nodes.filter(n=>n.status==='done');
  const completedSummary=locale==='en'?`${done.length} completed steps`:`완료한 절차 ${done.length}개`;

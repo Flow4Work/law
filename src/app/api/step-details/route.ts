@@ -13,7 +13,7 @@ export async function POST(request:Request){
  let body:any={};try{body=await request.json()}catch{return NextResponse.json({error:'선택한 단계를 읽지 못했어요.'},{status:400})}
  const locale=body.locale==='en'?'en':'ko';
  const value=body.case as LegalCase;const id=text(body.id,70);const node=Array.isArray(value?.nodes)?value.nodes.find(n=>n&&n.id===id):undefined;
- if(!node)return NextResponse.json({error:'이 단계를 다시 선택해 주세요.'},{status:400});
+ if(!node)return NextResponse.json({error:locale==='en'?'Select the step again.':'이 단계를 다시 선택해 주세요.'},{status:400});
  const procedureOnly=body.purpose==='procedure';
  if(procedureOnly&&node.scenario?.steps.length)return NextResponse.json({node,sources:[]});
  try{return await withAIContext({modelId:value.modelId,signal:AbortSignal.any([request.signal,AbortSignal.timeout(140000)])},async()=>{

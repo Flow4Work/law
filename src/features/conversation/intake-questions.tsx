@@ -1,5 +1,5 @@
 'use client';
-import {useT} from '@/lib/i18n';
+import {useLocale,useT} from '@/lib/i18n';
 import {useEffect,useState} from 'react';
 import {SHOWCASE_DETAIL} from '@/lib/portfolio-showcase';
 import {ArrowRight,ChevronDown,MessageCircle} from 'lucide-react';
@@ -7,6 +7,7 @@ import type {IntakeAnswer,IntakePlan} from '@/lib/intake';
 
 export function IntakeQuestions({plan,onAnswer,showcaseStage=-1}:{plan:IntakePlan;onAnswer:(answer:IntakeAnswer)=>void;showcaseStage?:number}){
  const __t=useT();
+ const locale=useLocale();
  const [choice,setChoice]=useState('');
  const [detail,setDetail]=useState('');
  const [openInput,setOpenInput]=useState(false);
@@ -22,14 +23,14 @@ export function IntakeQuestions({plan,onAnswer,showcaseStage=-1}:{plan:IntakePla
   if(!choice&&!value)return;
   onAnswer({choice,detail:value.slice(0,1500)});
  };
- const unknownPresent=options.some(c=>/모르|확실하지|기억나지|불명확/.test(c));
+ const unknownPresent=options.some(c=>/모르|확실하지|기억나지|불명확/.test(c)||locale==='en'&&/\b(?:unsure|unclear|not sure|don.t know|unknown)\b/i.test(c));
  return <section className="intake-card" aria-label={__t("사건의 핵심 확인 질문")}>
    <div className="intake-progress"><span><MessageCircle size={15}/> {__t("핵심 사실 확인")}</span><span className="intake-waiting" role="status"><i aria-hidden="true"/>{__t("답변 대기")}</span><strong>{__t("질문")} {step+1} {__t("/ 최대 3")}</strong></div>
    <div className="intake-progress-track" aria-hidden="true"><span style={{width:Math.min(100,((step+1)/3)*100)+'%'}}/></div>
-   <h2>{item.question}</h2>
-   {item.why&&<p className="intake-hint">{item.why}</p>}
-   {options.length>0&&<div className="intake-options" role="group" aria-label={item.question}>
-     {options.map((value,i)=><button key={i} type="button" className={choice===value?'is-selected':''} aria-pressed={choice===value} onClick={()=>setChoice(c=>c===value?'':value)}><span className="intake-radio" aria-hidden="true"/><span>{value}</span></button>)}
+   <h2>{__t(item.question)}</h2>
+   {item.why&&<p className="intake-hint">{__t(item.why)}</p>}
+   {options.length>0&&<div className="intake-options" role="group" aria-label={__t(item.question)}>
+     {options.map((value,i)=><button key={i} type="button" className={choice===value?'is-selected':''} aria-pressed={choice===value} onClick={()=>setChoice(c=>c===value?'':value)}><span className="intake-radio" aria-hidden="true"/><span>{__t(value)}</span></button>)}
    </div>}
    {options.length>0&&!freeOpen&&<button className="intake-open-text" type="button" onClick={()=>setOpenInput(true)} aria-expanded={false}><span>{__t("직접 답변하거나 내용 추가")}</span><ChevronDown size={15}/></button>}
    {freeOpen&&<div className="intake-text-area">

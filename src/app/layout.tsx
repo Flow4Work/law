@@ -6,7 +6,7 @@ import {ActivityRecorder} from '@/features/workspace/activity-recorder';
 export const metadata: Metadata = {
   title: '법률 로드맵 | 복잡한 고민, 한 걸음씩',
   description: '내 상황을 편하게 이야기하고, 가능한 방법과 그다음 상황을 한눈에 살펴봐요.',
-  metadataBase:new URL('https://law-lake-theta.vercel.app'),
+  metadataBase:new URL('https://'+(process.env.VERCEL_PROJECT_PRODUCTION_URL||'law-lake-theta.vercel.app')),
   alternates:{canonical:'/',languages:{'ko-KR':'/','en-US':'/en'}},
 };
 export default async function RootLayout({children}:{children:React.ReactNode}) {

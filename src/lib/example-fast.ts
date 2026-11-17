@@ -108,10 +108,11 @@ function supplementsFor(nodes:RoadmapNode[]):Record<string,DetailSupplement>{
  }
  return values;
 }
-export function exampleResult(preset:ExamplePreset,plan:IntakePlan):Pick<LegalCase,'nodes'|'edges'|'facts'|'sources'|'evidenceStatus'|'detailSupplements'> & {reply:string}{
- if(preset==='wage-fast')return wageExampleResult(plan);
+export function exampleResult(preset:ExamplePreset,plan:IntakePlan,translate?:(value:string)=>string):Pick<LegalCase,'nodes'|'edges'|'facts'|'sources'|'evidenceStatus'|'detailSupplements'> & {reply:string}{
+ if(preset==='wage-fast')return wageExampleResult(plan,translate);
  const ids=idsFor(preset,plan);
- const names=plan.answers.map((a,i)=>QUESTIONS[preset][i]?.question+': '+(a.choice||'미확인'));
+ const copy=translate||((value:string)=>value);
+ const names=plan.answers.map((a,i)=>copy(QUESTIONS[preset][i]?.question||'')+': '+copy(a.choice||'미확인'));
  const root:RoadmapNode={id:preset+':now',title:preset==='deposit-fast'?'계약 종료 후 보증금 미반환':'경찰 출석 연락을 받은 상황',description:names.join(' / ').slice(0,230),
   kind:'situation',status:'current',conditions:[],actions:[],documents:[],cost:'',duration:'',risks:[],sourceIds:[],next:ids,detailVersion:3};
  const chosen=ids.map(id=>structuredClone(routes[id]));

@@ -27,7 +27,7 @@ function generatedStep(id:string,route:RoadmapNode,step:ScenarioStep,kind:'step'
 
 /** A result can branch to an actual ending, additional work, or another existing route.
  * These are distinct: missing successor data must never be treated as "finished". */
-export function expandRoadmap(value:LegalCase):{nodes:RoadmapNode[];edges:RoadmapEdge[]} {
+export function expandRoadmap(value:LegalCase,copy=(value:string)=>value):{nodes:RoadmapNode[];edges:RoadmapEdge[]} {
  const nodes:RoadmapNode[]=[...value.nodes];
  const ids=new Set(nodes.map(node=>node.id));
  const edges:RoadmapEdge[]=value.edges.filter(edge=>ids.has(edge.source)&&ids.has(edge.target));
@@ -45,7 +45,7 @@ export function expandRoadmap(value:LegalCase):{nodes:RoadmapNode[];edges:Roadma
    const stage=generatedStep(id,route,step,'step',index);
    stage.status=value.progress?.[id]||(route.scenarioRevealed===undefined&&index<(route.scenarioIndex||0)?'done':'possible');
    addNode(stage);
-   addEdge(source,id,index===0?'시작':undefined);
+   addEdge(source,id,index===0?copy('시작'):undefined);
    source=id;
   });
   if(revealedCount(route)<=scenario.steps.length)continue;
@@ -65,7 +65,7 @@ export function expandRoadmap(value:LegalCase):{nodes:RoadmapNode[];edges:Roadma
     const id='scenario:'+route.id+':outcome:'+index+':followup:'+stepIndex;
     const stage=generatedStep(id,route,step,'followup',stepIndex,index);
     addNode(stage);
-    addEdge(last,id,stepIndex===0?'이후 절차':undefined);
+    addEdge(last,id,stepIndex===0?copy('이후 절차'):undefined);
     last=id;
    });
    // A handoff points to an existing route without dragging its original Depth 2
@@ -80,17 +80,17 @@ export function expandRoadmap(value:LegalCase):{nodes:RoadmapNode[];edges:Roadma
      conditions:[transition.condition],actions:[],documents:[],cost:'',duration:'',
      risks:[],sourceIds:target.sourceIds,next:[],
     });
-    addEdge(outcomeId,id,transition.label||'다른 방법');
+    addEdge(outcomeId,id,transition.label||copy('다른 방법'));
    }
    if(isTerminalOutcome(outcome)){
     const id='scenario:'+route.id+':complete:'+index;
     addNode({
-     id,title:'절차 종료',description:completionText(outcome),status:'possible',kind:'completion',
+     id,title:copy('절차 종료'),description:copy(completionText(outcome)),status:'possible',kind:'completion',
      scenarioParentId:route.id,scenarioOutcome:index,
      conditions:outcome.condition?[outcome.condition]:[],actions:[],documents:[],cost:'',duration:'',
      risks:[],sourceIds:[],next:[],
     });
-    addEdge(last,id,'종료');
+    addEdge(last,id,copy('종료'));
    }
   });
  }

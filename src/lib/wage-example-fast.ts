@@ -91,7 +91,7 @@ export function nextWageExamplePlan(plan:IntakePlan):IntakePlan{
  const ids=stage>=0?stageRoutes[stage]:stageRoutes[0];
  return {...plan,questions,routes:ids.map(id=>{const n=all.find(n=>n.id===id)!;return {title:n.title,description:n.description}})};
 }
-export function wageExampleResult(plan:IntakePlan):Pick<LegalCase,'nodes'|'edges'|'facts'|'sources'|'evidenceStatus'|'detailSupplements'> & {reply:string}{
+export function wageExampleResult(plan:IntakePlan,translate?:(value:string)=>string):Pick<LegalCase,'nodes'|'edges'|'facts'|'sources'|'evidenceStatus'|'detailSupplements'> & {reply:string}{
  const stage=progressIndex(plan);
  const amount=plan.answers[1]?.choice||'정확히 모르겠어요';
  const amountLabel=amountChoices.includes(amount)?amount:'금액 미확인';
@@ -101,8 +101,8 @@ export function wageExampleResult(plan:IntakePlan):Pick<LegalCase,'nodes'|'edges
  const root=showcaseCase(12).nodes.find(n=>n.id==='wage-now')!;
  const available=[...showcaseCase(12).nodes,statusNode,courtStatusNode,enforceNode];
  const routes=routeIds.map(id=>structuredClone(available.find(n=>n.id===id)!));
- const nodes=[{...root,title:'퇴사 후 체불임금 상담',description:`선택한 진행 상황: ${starting}. 체불 금액: ${amountLabel}.`,next:[...routeIds]},...routes];
- const facts=[`진행 상태 선택: ${plan.answers[0]?.choice||'정확히 모르겠어요'}`,`체불 금액 범위: ${amountLabel}`,`추가 진술: ${detail.slice(0,400)}`];
+ const nodes=[{...root,title:'퇴사 후 체불임금 상담',description:translate?`Current stage: ${translate(starting)}. Unpaid wages: ${translate(amountLabel)}.`:`선택한 진행 상황: ${starting}. 체불 금액: ${amountLabel}.`,next:[...routeIds]},...routes];
+ const facts=translate?[`Stage: ${translate(plan.answers[0]?.choice||'정확히 모르겠어요')}`,`Unpaid wages: ${translate(amountLabel)}`,`Additional details: ${plan.answers[2]?.detail.trim().slice(0,400)||translate(detail)}`]:[`진행 상태 선택: ${plan.answers[0]?.choice||'정확히 모르겠어요'}`,`체불 금액 범위: ${amountLabel}`,`추가 진술: ${detail.slice(0,400)}`];
  const detailSupplements:Record<string,DetailSupplement>={};
  for(const route of routes){
    route.scenario?.steps.forEach((step,index)=>{
@@ -115,6 +115,6 @@ export function wageExampleResult(plan:IntakePlan):Pick<LegalCase,'nodes'|'edges
      });
    });
  }
- const reply= `입력하신 단계(${starting})와 금액 범위(${amountLabel})를 기준으로 가능한 경로를 지도에 정리했어요. 각 방법을 선택하면 준비 단계와 결과에 따른 갈림길을 바로 펼칠 수 있어요. 이 화면은 빠른 체험용 사전 구성 예시이며, 입력한 사실과 법적 요건에 대한 개별 검증 결과는 아니에요.`;
+ const reply=translate?'The map shows possible paths based on your answers. Select a path to explore its steps and possible outcomes. This prewritten example illustrates the process and does not verify the facts or legal requirements of your case.':`입력하신 단계(${starting})와 금액 범위(${amountLabel})를 기준으로 가능한 경로를 지도에 정리했어요. 각 방법을 선택하면 준비 단계와 결과에 따른 갈림길을 바로 펼칠 수 있어요. 이 화면은 빠른 체험용 사전 구성 예시이며, 입력한 사실과 법적 요건에 대한 개별 검증 결과는 아니에요.`;
  return {nodes,edges:routeIds.map(id=>({source:root.id,target:id})),facts,sources:[],evidenceStatus:'unverified',detailSupplements,reply};
 }

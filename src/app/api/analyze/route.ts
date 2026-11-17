@@ -22,7 +22,7 @@ export async function GET(){const cfg=await getProvider({preferConfiguredModel:t
 export async function POST(request:Request){
  let body:any={};try{body=await request.json()}catch{return NextResponse.json({error:'입력한 내용을 읽지 못했어요.'},{status:400})}
  const locale=body.locale==='en'?'en':'ko';
- const message=text(body.message,7000);if(!message)return NextResponse.json({error:'상황을 입력해 주세요.'},{status:400});
+ const message=text(body.message,7000);if(!message)return NextResponse.json({error:locale==='en'?'Enter your situation.':'상황을 입력해 주세요.'},{status:400});
  const previous=body.previous&&typeof body.previous==='object'?body.previous as LegalCase:undefined;
  const controller=new AbortController();
  const signal=AbortSignal.any([request.signal,controller.signal,AbortSignal.timeout(280000)]);
@@ -57,7 +57,8 @@ export async function POST(request:Request){
   const structuralIssues=findAnalysisIssues(draft,userText);
   // 일반 사건은 빠르게 반환하고, 처분·강제집행·기한처럼 위험한 사건이나 구조 오류만 AI 재검토한다.
   const reviewNeeded=structuralIssues.length>0
-   ||/불송치|불기소|약식명령|기소|고소|수사|폭행|스토킹|형사|강제집행|압류|경매|소멸시효|제소기간|법정기한/.test(userText)
+   ||/불송치|불기소|약식명령|기소|고소|수사|폭행|스토킹|형사|강제집행|압류|경매|소멸시효|제소기간|법정기한/.test(lookupText)
+   ||locale==='en'&&/\b(?:non-referral|non-prosecution|summary order|statute of limitations|deadline|appeal)\b/i.test(userText)
    ||draft.nodes.some(n=>n.kind==='route'&&(!n.scenario?.steps.length||!n.scenario?.outcomes.length));
   const reviewContext={userText,officialProcedureNotes:guidance.notes,sources:provisionalSources.map(s=>({id:s.id,title:s.title,kind:s.kind,requiredDocuments:s.requiredDocuments,snippet:s.snippet||''})),draft};
   if(reviewNeeded)notify({phase:'reviewing',message:locale==='en'?'Checking important procedural conditions and risks.':'처분과 절차상 중요한 부분을 한 번 더 검토하고 있어요.'});

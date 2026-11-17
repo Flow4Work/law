@@ -68,7 +68,7 @@ return (
        <div className="conversation-list" aria-live="polite" aria-busy={busy}>
          {(!active||!active.messages.length)&&<div className="welcome-block">
            <div className="suggestion-label">{__t("이런 고민부터 이야기할 수 있어요")}</div>
-           <div className="prompt-cards">{EXAMPLE_QUESTIONS.map((x,i)=><button key={x} onClick={()=>fillInput(__t(x))} disabled={busy}><span className="prompt-category">{[__t("회사에서"),__t("집 계약에서"),__t("경찰 연락을 받고")][i]}</span><span className="prompt-title">{__t(x)}</span><ArrowRight size={18}/></button>)}</div>
+           <div className="prompt-cards">{EXAMPLE_QUESTIONS.map((x,i)=><button key={x} onClick={()=>fillInput(x)} disabled={busy}><span className="prompt-category">{[__t("회사에서"),__t("집 계약에서"),__t("경찰 연락을 받고")][i]}</span><span className="prompt-title">{__t(x)}</span><ArrowRight size={18}/></button>)}</div>
          </div>}
          {active?.messages.map((m,index,messages)=><ChatMessage item={m} key={m.id} showFollowups={index===messages.length-1&&!active?.intake} onFollowupApply={answer=>submit(answer,false)} onRetryOther={m.error&&alternateRetryAvailable?retryWithAlternative:undefined} retryOtherLabel={alternateRetryLabel} onRetry={()=>submit(undefined,true)}/>)}
          {active?.intake&&active.intake.answers.length<active.intake.questions.length&&!busy&&<IntakeQuestions key={active.id+':'+active.intake.answers.length} plan={active.intake} onAnswer={acceptIntakeAnswer} showcaseStage={showcaseStage}/>}
