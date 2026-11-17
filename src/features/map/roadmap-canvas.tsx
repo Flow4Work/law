@@ -1,5 +1,5 @@
 'use client';
-import {useT} from '@/lib/i18n';
+import {useLocale,useT} from '@/lib/i18n';
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {ReactFlow,Controls,Background,BackgroundVariant,Handle,Position,BaseEdge,MarkerType,useReactFlow,ViewportPortal,type EdgeProps,type NodeProps} from '@xyflow/react';
 import {ChevronRight,Check,Clock3} from 'lucide-react';
@@ -100,6 +100,7 @@ function RoadmapConnector({id,sourceX,sourceY,targetX,targetY,markerEnd,style,da
 const edgeTypes={roadmap:RoadmapConnector};
 export function Canvas({value,selected,focusId,onSelect,busy}:{value:LegalCase;selected:string|null;focusId:string|null;onSelect:(id:string)=>void;busy:boolean}){
  const __t=useT();
+ const locale=useLocale();
  const [alignment,setAlignment]=useState<RoadmapAlignment>('top');
  const [alignmentLoaded,setAlignmentLoaded]=useState(false);
  useEffect(()=>{if(!isPortfolioCapture())try{if(localStorage.getItem('legal-roadmap-alignment-v1')==='center')setAlignment('center')}catch{}setAlignmentLoaded(true)},[]);
@@ -183,7 +184,7 @@ export function Canvas({value,selected,focusId,onSelect,busy}:{value:LegalCase;s
    const left=Math.min(...steps.map(item=>item.position.x+ROADMAP_CARD.width/2));
    const right=Math.max(...steps.map(item=>item.position.x+ROADMAP_CARD.width/2));
    const top=Math.min(...ys)-38;
-   return {id,title:groupProcedureTitle(route),period:groupProcedurePeriod(route),left,width:right-left,top};
+   return {id,title:locale==='en'?route.title:groupProcedureTitle(route),period:groupProcedurePeriod(route),left,width:right-left,top};
   }).filter((group):group is {id:string;title:string;period:ReturnType<typeof groupProcedurePeriod>;left:number;width:number;top:number}=>Boolean(group));
  },[graph.nodes]);
  const focusedPath=useMemo(()=>focusedRoadmapPath(graph.nodes,graph.edges,selected||focusId),[graph,selected,focusId]);
