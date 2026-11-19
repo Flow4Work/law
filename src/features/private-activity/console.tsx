@@ -78,7 +78,7 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
   finally{clearTimeout(timeout);if(activeRequest.current===controller){activeRequest.current=null;setBusy(false)}}
  },[days,site,source,archiveDate,cursor,action,locationFilter,newest,appliedSearch,archiveAvailable]);
  const resetPage=()=>{activeRequest.current?.abort();activeRequest.current=null;lastResponse.current=null;setCursors([null]);setReport(null)};
- const switchSite=(next:ActivitySite)=>{if(next===site)return;resetPage();setSite(next);setSource('database');setAutoRefresh(next!=='sph');setSearch('');setAppliedSearch('');setAction('all');setLocationFilter('all')};
+ const switchSite=(next:ActivitySite)=>{if(next===site)return;resetPage();setSite(next);setSource('database');setAutoRefresh(true);setSearch('');setAppliedSearch('');setAction('all');setLocationFilter('all')};
  useEffect(()=>{
   const query=activityViewQuery({days,site,source,date:archiveDate,search:'',action,location:locationFilter,newest});
   window.history.replaceState(window.history.state,'',window.location.pathname+'?'+query);
@@ -95,8 +95,11 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
  useEffect(()=>{if(authenticated)void load();return()=>{activeRequest.current?.abort();activeRequest.current=null}},[authenticated,load]);
  useEffect(()=>{
   // Keep current records live, without moving an older page while it is being read.
-  if(!authenticated||site==='sph'||source!=='database'||!autoRefresh||cursor||!newest)return;
-  const refresh=()=>{if(document.visibilityState==='visible'&&!activeRequest.current&&Date.now()>=retryAfter.current&&Date.now()-lastRead.current>=1000)void load()};
+  if(!authenticated||source!=='database'||!autoRefresh||cursor||!newest)return;
+  // SPH is a small visit counter: poll at most once per minute, only while this
+  // authenticated admin view is active. All other sites keep their existing cadence.
+  const refreshGap=site==='sph'?60000:1000;
+  const refresh=()=>{if(document.visibilityState==='visible'&&!activeRequest.current&&Date.now()>=retryAfter.current&&Date.now()-lastRead.current>=refreshGap)void load()};
   return watchActivityRefresh(refresh,setRefreshState);
  },[authenticated,source,autoRefresh,cursor,newest,load]);
  const login=async(event:React.FormEvent)=>{
