@@ -39,7 +39,7 @@ export async function readActivityReport(days:number,site:ActivitySite='law',cur
  const events=all.filter(event=>(event.site||'law')===site).sort((a,b)=>b.at.localeCompare(a.at)||b.id.localeCompare(a.id));
  const ordered=filters.newest?events:[...events].reverse();
  const page=ordered.filter(event=>(!cursor||(filters.newest?event.at<cursor.at||event.at===cursor.at&&event.id<cursor.id:event.at>cursor.at||event.at===cursor.at&&event.id>cursor.id))&&activityMatches(event,filters)).slice(0,51),last=page[49];
- return {events:page.slice(0,50),total:events.length,visits:events.filter(e=>e.action==='visit').length,queries:events.filter(e=>e.action==='query').length,
+ return {events:page.slice(0,50),total:events.length,visits:events.filter(e=>e.action==='visit').length,queries:events.filter(e=>e.action==='query').length,clicks:events.filter(e=>e.action==='click').length,
   views:events.filter(e=>e.action==='view_step').length,uniqueIps:new Set(events.map(e=>e.ip)).size,visitors:new Set(events.map(e=>e.visitorId||e.ip)).size,
   days,site,generatedAt:new Date().toISOString(),limited:page.length>50,source:'database',statisticsScope:'period',
   nextCursor:page.length>50?Buffer.from(JSON.stringify({at:last.at,id:last.id})).toString('base64url'):null};
