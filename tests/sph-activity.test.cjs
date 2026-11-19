@@ -12,7 +12,7 @@ function loader(overrides={}){
   vm.runInNewContext(output,{exports,require:id=>id==='server-only'?{}:overrides[id]||(id.startsWith('@/geo/')?require(path.join(root,'src/geo',id.slice(6))):id.startsWith('@/lib/')?load('src/lib/'+id.slice(6)+'.ts'):id.startsWith('./')?load(path.relative(root,path.resolve(path.dirname(file),id+'.ts'))):require(id)),process:{env,cwd:()=>root},Buffer,Uint8Array,Request,Response,Headers,URL,URLSearchParams,Date,AbortController,setTimeout,clearTimeout,console});return exports;
  }return load;
 }
-test('SPH records only timestamp and predefined UI events in one encrypted batch without Blob calls',async()=>{
+test('SPH encrypts visitor IP and fixed-label events without Blob calls',async()=>{
  const db=new PGlite();await db.exec(fs.readFileSync(path.join(root,'migrations/001-private-activity.sql'),'utf8'));
  let blobCalls=0,dbQueries=0;
  const load=loader({'@neondatabase/serverless':{neon:()=>({query:async(sql,args)=>{dbQueries++;return (await db.query(sql,args)).rows}})},'@vercel/blob':new Proxy({}, {get(){blobCalls++;throw Error('Blob is prohibited')}})});
@@ -35,9 +35,10 @@ test('SPH records only timestamp and predefined UI events in one encrypted batch
   assert(!JSON.stringify(rows).includes('SHOULD_NEVER_SAVE'));
   assert(!JSON.stringify(rows).includes('203.0.113.44'));
   const saved=cipher.decryptActivity(rows[0].payload);
-  assert.equal(saved.ip,'');assert.equal(saved.detail,'공공 입찰');assert.equal(saved.page,'/');
+  assert.equal(saved.ip,'203.0.113.44');assert.equal(saved.ipVersion,'IPv4');assert.equal(saved.detail,'공공 입찰');assert.equal(saved.page,'/');
   assert.equal(saved.search,undefined);assert.equal(saved.country,'');
   const report=await store.readActivityReport(1,'sph');
-  assert.equal(report.total,1);assert.equal(report.clicks,1);
+  assert.equal(report.total,1);assert.equal(report.clicks,1);assert.equal(report.uniqueIps,1);
+  assert.equal(report.events[0].ip,'203.0.113.44');
  }finally{await db.close()}
 });

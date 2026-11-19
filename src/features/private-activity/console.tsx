@@ -84,6 +84,14 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
   window.history.replaceState(window.history.state,'',window.location.pathname+'?'+query);
  },[days,site,source,archiveDate,action,locationFilter,newest]);
  useEffect(()=>{const restore=()=>{const view=parseActivityView(new URLSearchParams(window.location.search));resetPage();setSite(view.site);setDays(view.days);setSource(view.source);setArchiveDate(view.date);setAction(view.action);setLocationFilter(view.location);setNewest(view.newest);setSearch('');setAppliedSearch('')};window.addEventListener('popstate',restore);return()=>window.removeEventListener('popstate',restore)},[]);
+ useEffect(()=>{
+  if(typeof document.getElementById!=='function')return;
+  const tab=document.getElementById('private-tab-'+site),nav=tab?.parentElement;
+  if(!tab||!nav)return;
+  const selected=tab.getBoundingClientRect(),visible=nav.getBoundingClientRect();
+  if(selected.left<visible.left)nav.scrollLeft-=visible.left-selected.left+6;
+  else if(selected.right>visible.right)nav.scrollLeft+=selected.right-visible.right+6;
+ },[site]);
  useEffect(()=>{if(authenticated)void load();return()=>{activeRequest.current?.abort();activeRequest.current=null}},[authenticated,load]);
  useEffect(()=>{
   // Keep current records live, without moving an older page while it is being read.
@@ -121,7 +129,7 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
  /** The most frequent home-district IP is flagged in both tabs so the owner's own visits stand out. */
  const selfIp=report?.selfIp||'';
  return <main className="private-activity"><div className="private-wrap">
-  <header className="private-header"><div><div className="private-kicker"><span/>PRIVATE WORKSPACE</div><h1>{siteInfo.title}</h1><p>{siteInfo.description} <a className="private-site-link" href={siteInfo.url} target="_blank" rel="noreferrer">{siteInfo.host} ↗</a></p></div><div className="private-actions"><button className="private-button" onClick={verify} disabled={verifying||busy} title="이 브라우저의 실제 위치로 구를 한 번 확인하면, 이 IP의 기록이 정확해집니다.">{verifying?<LoaderCircle className="private-spin" size={16}/>:<MapPin size={16}/>}내 위치로 구 확인</button><button className="private-button" onClick={logout} disabled={busy}><LogOut size={16}/>로그아웃</button></div></header>
+  <header className="private-header"><div><div className="private-kicker"><span/>PRIVATE WORKSPACE</div><h1>{siteInfo.title}</h1><p>{siteInfo.description} <a className="private-site-link" href={siteInfo.url} target="_blank" rel="noreferrer">{siteInfo.host} ↗</a></p></div><div className="private-actions">{site!=='sph'&&<button className="private-button" onClick={verify} disabled={verifying||busy} title="이 브라우저의 실제 위치로 구를 한 번 확인하면, 이 IP의 기록이 정확해집니다.">{verifying?<LoaderCircle className="private-spin" size={16}/>:<MapPin size={16}/>}내 위치로 구 확인</button>}<button className="private-button" onClick={logout} disabled={busy}><LogOut size={16}/>로그아웃</button></div></header>
   <nav className="private-tabs" role="tablist" aria-label="추적할 사이트">{SITE_ORDER.map(key=>{const info=SITE_META[key],Icon=info.icon;return <button key={key} id={'private-tab-'+key} role="tab" aria-selected={site===key} aria-controls="private-panel" className={'private-tab'+(site===key?' private-tab-active':'')} onClick={()=>switchSite(key)}><Icon size={16}/><span>{info.label}</span><small>{info.host}</small></button>})}</nav>
   {site==='sph'?<SphActivityPanel
     report={report} busy={busy} error={error} days={days} action={action}

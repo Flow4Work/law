@@ -44,12 +44,13 @@ export async function POST(request:Request){
   if(typeof item.id!=='string'||!uuid.test(item.id)||typeof item.visitorId!=='string'||!uuid.test(item.visitorId)||
    typeof item.action!=='string'||typeof item.detail!=='string'||!allowed[item.action as ActivityAction]?.has(item.detail))return new Response(null,{status:400,headers});
  }
- const ip=requestAddress(request.headers).ip;
+ const address=requestAddress(request.headers);
+ const ip=address.ip;
  const at=new Date().toISOString();
  const events:ActivityEvent[]=incoming.map(raw=>{
   const item=raw as {id:string;visitorId:string;action:ActivityAction;detail:string};
-  return {id:item.id,visitorId:item.visitorId,at,site:'sph',page:'/',ip:'',country:'',
-   city:'',district:'',location:'',districtSource:'unavailable',
+  return {id:item.id,visitorId:item.visitorId,at,site:'sph',page:'/',ip,country:'',
+   ipVersion:address.ipVersion,city:'',district:'',location:'',districtSource:'unavailable',
    action:item.action,detail:item.detail};
  });
  try{
