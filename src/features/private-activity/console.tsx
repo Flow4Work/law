@@ -3,11 +3,12 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import {Activity,ArrowDown,ArrowUp,Briefcase,Clock3,Globe2,KeyRound,LoaderCircle,LogOut,Map as MapIcon,MapPin,RefreshCw,Scale,Search,ShieldCheck,Users} from 'lucide-react';
 import {ACTIVITY_LABELS,ACTIVITY_SITES,type ActivityReport,type ActivityAction,type ActivityConfidence,type ActivityEvent,type ActivitySite} from '@/lib/activity-types';
 import './console.css';
+import {SphActivityPanel} from './sph-panel';
 import {watchActivityRefresh,type ActivityRefreshState} from '@/lib/activity-refresh';
 import {activityMatches,activityViewQuery,parseActivityView,PC_IP,MOBILE_IP,activityDeviceLabel,type ActivityView} from '@/lib/activity-view';
 /** Portfolio, Scout, MapForYou, then Law: one console, one tracking pipeline per site. */
-const SITE_ORDER:ActivitySite[]=['portfolio','scout','mapforyou','law'];
-const SITE_META={portfolio:{label:ACTIVITY_SITES.portfolio.label,host:ACTIVITY_SITES.portfolio.host,url:ACTIVITY_SITES.portfolio.url,icon:Briefcase,title:'포트폴리오 활동 기록',description:'포트폴리오 방문 위치와 프로젝트 조회 흐름을 한곳에서 확인합니다.',queryLabel:'프로젝트 조회',empty:'포트폴리오 방문 기록이 여기에 표시됩니다.'},scout:{label:ACTIVITY_SITES.scout.label,host:ACTIVITY_SITES.scout.host,url:ACTIVITY_SITES.scout.url,icon:Users,title:'시딩 에이전트 활동 기록',description:'시딩 에이전트의 접속 위치와 대화 요청 흐름을 한곳에서 확인합니다.',queryLabel:'대화 요청',empty:'시딩 에이전트에서 발생한 활동이 여기에 표시됩니다.'},mapforyou:{label:ACTIVITY_SITES.mapforyou.label,host:ACTIVITY_SITES.mapforyou.host,url:ACTIVITY_SITES.mapforyou.url,icon:MapIcon,title:'맛집 지도 활동 기록',description:'지도 방문 위치와 검색, 가게 조회 흐름을 한곳에서 확인합니다.',queryLabel:'검색어',empty:'맛집 지도 방문 기록이 여기에 표시됩니다.'},law:{label:ACTIVITY_SITES.law.label,host:ACTIVITY_SITES.law.host,url:ACTIVITY_SITES.law.url,icon:Scale,title:'법률 서비스 활동 기록',description:'접속 위치와 질문, 서비스 이용 흐름을 한곳에서 확인합니다.',queryLabel:'입력한 질문',empty:'서비스에서 발생한 활동이 여기에 표시됩니다.'}} as const;
+const SITE_ORDER:ActivitySite[]=['portfolio','scout','mapforyou','law','sph'];
+const SITE_META={portfolio:{label:ACTIVITY_SITES.portfolio.label,host:ACTIVITY_SITES.portfolio.host,url:ACTIVITY_SITES.portfolio.url,icon:Briefcase,title:'포트폴리오 활동 기록',description:'포트폴리오 방문 위치와 프로젝트 조회 흐름을 한곳에서 확인합니다.',queryLabel:'프로젝트 조회',empty:'포트폴리오 방문 기록이 여기에 표시됩니다.'},scout:{label:ACTIVITY_SITES.scout.label,host:ACTIVITY_SITES.scout.host,url:ACTIVITY_SITES.scout.url,icon:Users,title:'시딩 에이전트 활동 기록',description:'시딩 에이전트의 접속 위치와 대화 요청 흐름을 한곳에서 확인합니다.',queryLabel:'대화 요청',empty:'시딩 에이전트에서 발생한 활동이 여기에 표시됩니다.'},mapforyou:{label:ACTIVITY_SITES.mapforyou.label,host:ACTIVITY_SITES.mapforyou.host,url:ACTIVITY_SITES.mapforyou.url,icon:MapIcon,title:'맛집 지도 활동 기록',description:'지도 방문 위치와 검색, 가게 조회 흐름을 한곳에서 확인합니다.',queryLabel:'검색어',empty:'맛집 지도 방문 기록이 여기에 표시됩니다.'},law:{label:ACTIVITY_SITES.law.label,host:ACTIVITY_SITES.law.host,url:ACTIVITY_SITES.law.url,icon:Scale,title:'법률 서비스 활동 기록',description:'접속 위치와 질문, 서비스 이용 흐름을 한곳에서 확인합니다.',queryLabel:'입력한 질문',empty:'서비스에서 발생한 활동이 여기에 표시됩니다.'},sph:{label:ACTIVITY_SITES.sph.label,host:ACTIVITY_SITES.sph.host,url:ACTIVITY_SITES.sph.url,icon:Activity,title:'SPH 활동 기록',description:'접속과 주요 버튼 클릭을 간단하게 확인합니다.',queryLabel:'검색 적용',empty:'아직 SPH 기록이 없습니다.'}} as const;
 const dateFormatter=new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
 const dateTime=(value:string)=>dateFormatter.format(new Date(value));
 const number=(value:number|undefined)=>value===undefined?'—':value.toLocaleString('ko-KR');
@@ -77,7 +78,7 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
   finally{clearTimeout(timeout);if(activeRequest.current===controller){activeRequest.current=null;setBusy(false)}}
  },[days,site,source,archiveDate,cursor,action,locationFilter,newest,appliedSearch,archiveAvailable]);
  const resetPage=()=>{activeRequest.current?.abort();activeRequest.current=null;lastResponse.current=null;setCursors([null]);setReport(null)};
- const switchSite=(next:ActivitySite)=>{if(next===site)return;resetPage();setSite(next);setSearch('');setAppliedSearch('');setAction('all');setLocationFilter('all')};
+ const switchSite=(next:ActivitySite)=>{if(next===site)return;resetPage();setSite(next);setSource('database');setAutoRefresh(next!=='sph');setSearch('');setAppliedSearch('');setAction('all');setLocationFilter('all')};
  useEffect(()=>{
   const query=activityViewQuery({days,site,source,date:archiveDate,search:'',action,location:locationFilter,newest});
   window.history.replaceState(window.history.state,'',window.location.pathname+'?'+query);
@@ -86,7 +87,7 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
  useEffect(()=>{if(authenticated)void load();return()=>{activeRequest.current?.abort();activeRequest.current=null}},[authenticated,load]);
  useEffect(()=>{
   // Keep current records live, without moving an older page while it is being read.
-  if(!authenticated||source!=='database'||!autoRefresh||cursor||!newest)return;
+  if(!authenticated||site==='sph'||source!=='database'||!autoRefresh||cursor||!newest)return;
   const refresh=()=>{if(document.visibilityState==='visible'&&!activeRequest.current&&Date.now()>=retryAfter.current&&Date.now()-lastRead.current>=1000)void load()};
   return watchActivityRefresh(refresh,setRefreshState);
  },[authenticated,source,autoRefresh,cursor,newest,load]);
@@ -122,6 +123,15 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
  return <main className="private-activity"><div className="private-wrap">
   <header className="private-header"><div><div className="private-kicker"><span/>PRIVATE WORKSPACE</div><h1>{siteInfo.title}</h1><p>{siteInfo.description} <a className="private-site-link" href={siteInfo.url} target="_blank" rel="noreferrer">{siteInfo.host} ↗</a></p></div><div className="private-actions"><button className="private-button" onClick={verify} disabled={verifying||busy} title="이 브라우저의 실제 위치로 구를 한 번 확인하면, 이 IP의 기록이 정확해집니다.">{verifying?<LoaderCircle className="private-spin" size={16}/>:<MapPin size={16}/>}내 위치로 구 확인</button><button className="private-button" onClick={logout} disabled={busy}><LogOut size={16}/>로그아웃</button></div></header>
   <nav className="private-tabs" role="tablist" aria-label="추적할 사이트">{SITE_ORDER.map(key=>{const info=SITE_META[key],Icon=info.icon;return <button key={key} id={'private-tab-'+key} role="tab" aria-selected={site===key} aria-controls="private-panel" className={'private-tab'+(site===key?' private-tab-active':'')} onClick={()=>switchSite(key)}><Icon size={16}/><span>{info.label}</span><small>{info.host}</small></button>})}</nav>
+  {site==='sph'?<SphActivityPanel
+    report={report} busy={busy} error={error} days={days} action={action}
+    page={cursors.length} canPrevious={cursors.length>1} canNext={!!report?.nextCursor}
+    onDays={next=>{resetPage();setDays(next)}}
+    onAction={next=>{resetPage();setAction(next)}}
+    onRefresh={()=>{if(cursor)resetPage();else void load()}}
+    onPrevious={()=>{setCursors(values=>values.slice(0,-1));setReport(null)}}
+    onNext={()=>{if(report?.nextCursor){setCursors(values=>[...values,report.nextCursor!]);setReport(null)}}}
+  />:<>
   {source==='database'&&<div className="private-self-note private-live-status"><label><input type="checkbox" checked={autoRefresh} onChange={event=>setAutoRefresh(event.target.checked)}/>자동 업데이트</label><strong>{!autoRefresh?'자동 업데이트 꺼짐':cursor||!newest?'이전 기록 조회 중 · 자동 업데이트 일시 중지':refreshState==='idle'?'5분 이상 활동 없음 · 자동 업데이트 대기':refreshState==='offline'?'인터넷 연결 대기':'30초마다 새 기록 확인'}</strong><span>{error?'최근 조회 실패 · 표시된 기록은 마지막 성공 기준':busy?'새 기록 확인 중':report?'마지막 확인 '+dateTime(report.generatedAt):'첫 기록 확인 중'} · 한국 시간</span></div>}
   {(site==='portfolio'||site==='law')&&<p className="private-self-note">Portfolio의 Law Map 카드는 프로젝트 소개(/law-project)를 엽니다. 소개 조회·서비스 보기 클릭은 Portfolio에, 실제 법률 서비스 접속은 Law에 기록됩니다. 소개만 조회하면 Law 접속 수는 늘지 않습니다.</p>}
   {verified&&<p className="private-verified" role="status"><MapPin size={15}/>이 브라우저 위치를 {verified}(으)로 확인했습니다. 이 IP의 기록은 정확도 높음으로 표시됩니다.</p>}
@@ -140,5 +150,6 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
    </tbody></table>{!rows.length&&<div className="private-empty"><Activity size={26}/><strong>{busy?'기록을 불러오고 있습니다.':error?'기록 조회에 실패했습니다.':source==='archive'&&!archiveAvailable?'과거 기록은 별도 보존 중입니다.':report?.searchLimited?'이 구간에는 일치하는 기록이 없습니다.':report?.total?'조회 조건에 맞는 기록이 없습니다.':'선택 기간에 기록된 활동이 없습니다.'}</strong><span>{busy?'잠시만 기다려주세요.':report?.nextCursor?'다음 페이지에서 이어서 확인할 수 있습니다.':siteInfo.empty}</span></div>}</div>
    {report?.searchLimited&&<p className="private-self-note" role="status">암호화 기록을 한 번에 최대 200건 확인했습니다. 검색이 끝난 것이 아닙니다. 다음 페이지를 눌러 나머지 기록에서 계속 검색하세요.</p>}<div className="private-actions"><button className="private-button" disabled={busy||cursors.length===1} onClick={()=>{setCursors(value=>value.slice(0,-1));setReport(null)}}>이전 페이지</button><span>{cursors.length} 페이지</span><button className="private-button" disabled={busy||!report?.nextCursor} onClick={()=>{if(report?.nextCursor){setCursors(value=>[...value,report.nextCursor!]);setReport(null)}}}>다음 페이지</button></div>{source==='archive'&&<p className="private-self-note">과거 원본은 보존됩니다. 날짜별로 직접 페이지를 넘겨 조회하며, 과거 통계는 현재 페이지 기준입니다. 신규 기록 통계는 선택 기간 전체 기준입니다.</p>}<footer className="private-table-footer"><span>{number(rows.length)}건 표시 · 구 판별 {number(matched)}건{report?.limited?' · 다음 페이지 있음':''}</span><span>{report?'업데이트 '+dateTime(report.generatedAt):error?'조회 실패':source==='archive'&&!archiveAvailable?'과거 원본 미연결':'기록 불러오는 중'} · 한국 시간</span></footer>
   </section><p className="private-footnote">구는 ① 브라우저 위치 확인 ② 서울시 우편번호 ③ IP 데이터베이스의 도시명·우편번호·좌표 순서로 판단합니다. Vercel이 주는 한국 우편번호는 서울시 중심 기본값인 경우가 많아, IP 데이터베이스가 다른 구를 가리키면 그쪽을 채택합니다. 회선 상세는 줄에 마우스를 올리면 전체 근거가 보입니다. IP만으로는 VPN·모바일 회선에서 실제 위치와 다를 수 있으니, 정확한 구는 “내 위치로 구 확인”을 한 번 눌러 확정하세요. 광진구에서 가장 자주 기록된 IP는 본인 접속으로 추정해 ‘내 접속’으로 표시합니다.</p>
+  </>}
  </div></main>;
 }
