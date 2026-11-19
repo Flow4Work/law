@@ -61,7 +61,7 @@ export async function readDatabaseReport(days:number,site:ActivitySite,cursor:Ac
  SELECT id,at,action,ip_key,visitor_key,country,district FROM law_activity.events WHERE site=$1 AND at>=$2 AND at<=$3
  ), stats AS (SELECT count(*)::int total,count(*) FILTER(WHERE action='visit')::int visits,
  count(*) FILTER(WHERE action='query')::int queries,count(*) FILTER(WHERE action='click')::int clicks,count(*) FILTER(WHERE action='view_step')::int views,
- count(DISTINCT ip_key) FILTER(WHERE ip_key<>$6)::int "uniqueIps",count(DISTINCT visitor_key)::int visitors FROM selected),
+ count(DISTINCT ip_key) FILTER(WHERE ip_key<>$6 AND ip_key<>$11)::int "uniqueIps",count(DISTINCT visitor_key)::int visitors FROM selected),
  regions AS (SELECT country,district,count(*)::int total FROM selected GROUP BY country,district),
  owner_key AS (SELECT ip_key FROM law_activity.events WHERE at>=$2 AND at<=$3 AND district='광진구' AND ip_key NOT IN ($6,$7)
  GROUP BY ip_key ORDER BY count(*) DESC,max(at) DESC LIMIT 1),
@@ -73,7 +73,7 @@ export async function readDatabaseReport(days:number,site:ActivitySite,cursor:Ac
  SELECT row_to_json(stats) stats,(SELECT payload FROM owner) owner,(SELECT min(at) FROM law_activity.events WHERE site=$1) "recordedFrom",
  COALESCE((SELECT json_agg(regions ORDER BY total DESC,country,district) FROM regions),'[]'::json) regions,
  COALESCE((SELECT json_agg(page ORDER BY at ${direction},id ${direction}) FROM page),'[]'::json) records FROM stats`,
- [site,start.toISOString(),new Date().toISOString(),cursor?.at||null,cursor?.id||null,privateIpKey('확인 불가'),privateIpKey('127.0.0.1'),filters.action,filters.location,scanLimit+1]);
+ [site,start.toISOString(),new Date().toISOString(),cursor?.at||null,cursor?.id||null,privateIpKey('확인 불가'),privateIpKey('127.0.0.1'),filters.action,filters.location,scanLimit+1,privateIpKey('')]);
  const result=rows[0],records=result.records as {at:string;id:string;payload:string}[];
  const events:ActivityEvent[]=[];let scanned=0,last:typeof records[number]|undefined;
  for(const row of records.slice(0,scanLimit)){scanned++;last=row;const event=decryptActivity<ActivityEvent>(row.payload);if(activityMatches(event,filters))events.push(event);if(events.length===50)break}
