@@ -5,7 +5,7 @@ function mount(overrides={},status=200){
  let stateIndex=0,now=10000,requests=0;const effects=[],intervals=new Set(),listeners={},changes=[],sent=[],exports={};
  const document={visibilityState:'visible',addEventListener:(name,fn)=>listeners[name]=fn,removeEventListener:name=>delete listeners[name]},navigator={onLine:true};
  const window={location:{pathname:'/qa-admin',search:''},history:{replaceState:()=>{}},setInterval:fn=>{intervals.add(fn);return fn},clearInterval:fn=>intervals.delete(fn),addEventListener:(name,fn)=>listeners[name]=fn,removeEventListener:name=>delete listeners[name]};
- const sites=Object.fromEntries(['portfolio','scout','law','mapforyou'].map(key=>[key,{label:key,host:key,url:'https://example.invalid'}]));
+ const sites=Object.fromEntries(['portfolio','scout','law','mapforyou','sph'].map(key=>[key,{label:key,host:key,url:'https://example.invalid'}]));
  const react={useState:value=>{const index=stateIndex++;return [Object.hasOwn(overrides,index)?overrides[index]:value,next=>changes.push({index,next})]},useRef:value=>({current:value}),useCallback:fn=>fn,useEffect:fn=>effects.push(fn)};
  class Clock extends Date{static now(){return now}}
  const helper={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname,'../src/lib/activity-refresh.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:helper,window,document,navigator,Date:Clock});

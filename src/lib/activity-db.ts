@@ -28,6 +28,18 @@ export async function appendDatabaseActivity(event:ActivityEvent){
   privateIpKey('visitor|'+(event.visitorId||event.ip)),event.country,event.district,encryptActivity(event)
  ]);
 }
+/** SPH telemetry uses one encrypted database write per batch; no Blob or geolocation reads. */
+export async function appendDatabaseActivities(events:ActivityEvent[]){
+ if(!events.length||events.length>5)throw new Error('Invalid SPH batch');
+ const params:string[]=[];
+ const tuples=events.map((event,i)=>{
+  params.push(event.id,event.at,event.site||'sph',event.action,privateIpKey(event.ip),
+   privateIpKey('visitor|'+(event.visitorId||event.ip)),event.country,event.district,encryptActivity(event));
+  return '('+Array.from({length:9},(_,j)=>'$'+(i*9+j+1)).join(',')+')';
+ });
+ await database().query(`INSERT INTO law_activity.events(id,at,site,action,ip_key,visitor_key,country,district,payload)
+ VALUES ${tuples.join(',')} ON CONFLICT(id) DO NOTHING`,params);
+}
 export type ActivityPage={at:string;id:string};
 export function decodeActivityCursor(value:string|null):ActivityPage|null{
  if(!value)return null;
@@ -48,7 +60,7 @@ export async function readDatabaseReport(days:number,site:ActivitySite,cursor:Ac
  const rows=await database().query(`WITH selected AS (
  SELECT id,at,action,ip_key,visitor_key,country,district FROM law_activity.events WHERE site=$1 AND at>=$2 AND at<=$3
  ), stats AS (SELECT count(*)::int total,count(*) FILTER(WHERE action='visit')::int visits,
- count(*) FILTER(WHERE action='query')::int queries,count(*) FILTER(WHERE action='view_step')::int views,
+ count(*) FILTER(WHERE action='query')::int queries,count(*) FILTER(WHERE action='click')::int clicks,count(*) FILTER(WHERE action='view_step')::int views,
  count(DISTINCT ip_key) FILTER(WHERE ip_key<>$6)::int "uniqueIps",count(DISTINCT visitor_key)::int visitors FROM selected),
  regions AS (SELECT country,district,count(*)::int total FROM selected GROUP BY country,district),
  owner_key AS (SELECT ip_key FROM law_activity.events WHERE at>=$2 AND at<=$3 AND district='광진구' AND ip_key NOT IN ($6,$7)
@@ -79,7 +91,7 @@ export async function saveDatabaseLocation(ip:string,kind:'verified'|'location',
  ON CONFLICT(key,kind) DO UPDATE SET payload=EXCLUDED.payload,expires=EXCLUDED.expires`,
  [privateIpKey(ip),kind,encryptActivity(value),kind==='location'?new Date(Date.now()+86400000).toISOString():null]);
 }
-export async function claimDatabaseAttempt(ip:string,kind:'login'|'event'|'report',maximum:number){
+export async function claimDatabaseAttempt(ip:string,kind:'login'|'event'|'report'|'sph',maximum:number){
  const seconds=kind==='login'?600:60;
  const rows=await database().query('SELECT law_activity.allow_request($1,$2,$3) allowed',[kind+'|'+privateIpKey(ip),Math.floor(Date.now()/(seconds*1000))*seconds,maximum]);
  return rows[0]?.allowed===true;
