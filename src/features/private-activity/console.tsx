@@ -1,6 +1,6 @@
 'use client';
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {Activity,ArrowDown,ArrowUp,Briefcase,Clock3,Globe2,KeyRound,LoaderCircle,LogOut,Map as MapIcon,MapPin,RefreshCw,Scale,Search,ShieldCheck,Users} from 'lucide-react';
+import {Activity,ArrowDown,ArrowUp,ArrowUpRight,Briefcase,Clock3,Globe2,KeyRound,LoaderCircle,LogOut,Map as MapIcon,MapPin,RefreshCw,Scale,Search,ShieldCheck,Users} from 'lucide-react';
 import {ACTIVITY_LABELS,ACTIVITY_SITES,type ActivityReport,type ActivityAction,type ActivityConfidence,type ActivityEvent,type ActivitySite} from '@/lib/activity-types';
 import './console.css';
 import {SphActivityPanel} from './sph-panel';
@@ -132,7 +132,11 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
  /** The most frequent home-district IP is flagged in both tabs so the owner's own visits stand out. */
  const selfIp=report?.selfIp||'';
  return <main className="private-activity"><div className="private-wrap">
-  <header className="private-header"><div><div className="private-kicker"><span/>PRIVATE WORKSPACE</div><h1>{siteInfo.title}</h1><p>{siteInfo.description} <a className="private-site-link" href={siteInfo.url} target="_blank" rel="noreferrer">{siteInfo.host} ↗</a></p></div><div className="private-actions">{site!=='sph'&&<button className="private-button" onClick={verify} disabled={verifying||busy} title="이 브라우저의 실제 위치로 구를 한 번 확인하면, 이 IP의 기록이 정확해집니다.">{verifying?<LoaderCircle className="private-spin" size={16}/>:<MapPin size={16}/>}내 위치로 구 확인</button>}<button className="private-button" onClick={logout} disabled={busy}><LogOut size={16}/>로그아웃</button></div></header>
+  <header className="private-header"><div><div className="private-kicker"><span/>PRIVATE WORKSPACE</div><h1>{siteInfo.title}</h1><p>{siteInfo.description} <a className="private-site-link" href={siteInfo.url} target="_blank" rel="noreferrer">{siteInfo.host} ↗</a></p></div><div className="private-actions">
+   <a className="private-button" href="https://sph-field-guide-six.vercel.app/" target="_blank" rel="noopener noreferrer">SPH 서비스 가이드 <ArrowUpRight size={15} aria-hidden="true"/></a>
+   {site!=='sph'&&<button className="private-button" onClick={verify} disabled={verifying||busy} title="이 브라우저의 실제 위치로 구를 한 번 확인하면, 이 IP의 기록이 정확해집니다.">{verifying?<LoaderCircle className="private-spin" size={16}/>:<MapPin size={16}/>}내 위치로 구 확인</button>}
+   <button className="private-button" onClick={logout} disabled={busy}><LogOut size={16}/>로그아웃</button>
+  </div></header>
   <nav className="private-tabs" role="tablist" aria-label="추적할 사이트">{SITE_ORDER.map(key=>{const info=SITE_META[key],Icon=info.icon;return <button key={key} id={'private-tab-'+key} role="tab" aria-selected={site===key} aria-controls="private-panel" className={'private-tab'+(site===key?' private-tab-active':'')} onClick={()=>switchSite(key)}><Icon size={16}/><span>{info.label}</span><small>{info.host}</small></button>})}</nav>
   {site==='sph'?<SphActivityPanel
     report={report} busy={busy} error={error} days={days} action={action}
