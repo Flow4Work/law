@@ -92,6 +92,21 @@ test('admin reload preserves validated view settings without putting private sea
  assert.equal(invalid.site,'law');assert.equal(invalid.days,1);assert.equal(invalid.action,'all');assert.equal(invalid.location,'all');assert.equal(invalid.newest,true);
 });
 
+test('SPH defaults to sales and preserves a guide deep link alongside existing filters',()=>{
+ const view=loader()('src/lib/activity-view.ts');
+ const params=new URLSearchParams('site=sph&days=7&source=database&action=click&location=all&order=newest');
+ const sales=view.parseActivityView(params);
+ assert.equal(sales.sphView,'sales');
+ assert.equal(view.activityViewQuery(sales).toString(),params.toString());
+ const guide=view.activityViewQuery({...sales,sphView:'guide'});
+ assert.equal(guide.get('sphView'),'guide');
+ const restored=view.parseActivityView(guide);
+ assert.equal(restored.sphView,'guide');
+ assert.equal(restored.days,7);
+ assert.equal(restored.action,'click');
+ assert.equal(view.activityViewQuery({...restored,site:'law'}).has('sphView'),false);
+});
+
 test('ingestion uses two DB calls with cached location, one for duplicates, and preserves global rate limits',async()=>{
  const db=new PGlite();await db.exec(fs.readFileSync(path.join(root,'migrations/001-private-activity.sql'),'utf8'));let queries=0;
  const load=loader({'@neondatabase/serverless':{neon:()=>({query:async(sql,args)=>{queries++;return (await db.query(sql,args)).rows}})}});

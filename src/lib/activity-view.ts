@@ -1,7 +1,8 @@
 import {ACTIVITY_LABELS,isActivitySite,type ActivityEvent,type ActivitySite} from './activity-types';
 
 export type ActivityFilters={search:string;action:string;location:string;newest:boolean};
-export type ActivityView=ActivityFilters&{site:ActivitySite;days:number;source:'database'|'archive';date:string};
+export type SphView='sales'|'guide';
+export type ActivityView=ActivityFilters&{site:ActivitySite;days:number;source:'database'|'archive';date:string;sphView?:SphView};
 export const defaultActivityFilters:ActivityFilters={search:'',action:'all',location:'all',newest:true};
 export const PC_IP='175.193.2.26',MOBILE_IP='211.234.207.181';
 export const activityDeviceLabel=(ip:string)=>ip===PC_IP?'내 PC':ip===MOBILE_IP?'내 핸드폰':'';
@@ -9,12 +10,14 @@ export function parseActivityView(query:URLSearchParams):ActivityView{
  const site=query.get('site'),days=Number(query.get('days')||1),action=query.get('action')||'all',location=query.get('location')||'all';
  const date=query.get('date')||new Date(Date.now()+9*3600000).toISOString().slice(0,10);
  return {...defaultActivityFilters,site:isActivitySite(site)?site:'law',days:[1,7,30].includes(days)?days:1,
+  ...(site==='sph'?{sphView:query.get('sphView')==='guide'?'guide':'sales'}:{}),
   source:site==='sph'?'database':query.get('source')==='archive'?'archive':'database',date:/^20\d{2}-\d{2}-\d{2}$/.test(date)?date:new Date(Date.now()+9*3600000).toISOString().slice(0,10),
   action:action==='all'||Object.hasOwn(ACTIVITY_LABELS,action)?action:'all',location:['all','district','missing','high','medium','low'].includes(location)?location:'all',newest:query.get('order')!=='oldest'};
 }
 /** Only non-sensitive view settings belong in the URL. Search text stays in memory. */
 export function activityViewQuery(view:ActivityView){
- return new URLSearchParams({site:view.site,days:String(view.days),source:view.source,...(view.source==='archive'?{date:view.date}:{}),action:view.action,location:view.location,order:view.newest?'newest':'oldest'});
+ return new URLSearchParams({site:view.site,days:String(view.days),source:view.source,...(view.source==='archive'?{date:view.date}:{}),action:view.action,location:view.location,order:view.newest?'newest':'oldest',
+  ...(view.site==='sph'&&view.sphView==='guide'?{sphView:view.sphView}:{})});
 }
 export function activityMatches(event:ActivityEvent,filters:ActivityFilters){
  const level=!event.district?'':event.districtConfidence||(event.districtSource==='ip-postal'?'high':event.districtSource==='ip-coordinate'?'low':'medium');

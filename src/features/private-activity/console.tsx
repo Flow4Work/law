@@ -5,9 +5,10 @@ import {ACTIVITY_LABELS,ACTIVITY_SITES,type ActivityReport,type ActivityAction,t
 import './console.css';
 import {SphActivityPanel} from './sph-panel';
 import {watchActivityRefresh,type ActivityRefreshState} from '@/lib/activity-refresh';
-import {activityMatches,activityViewQuery,parseActivityView,PC_IP,MOBILE_IP,activityDeviceLabel,type ActivityView} from '@/lib/activity-view';
+import {activityMatches,activityViewQuery,parseActivityView,PC_IP,MOBILE_IP,activityDeviceLabel,type ActivityView,type SphView} from '@/lib/activity-view';
 /** Portfolio, Scout, MapForYou, then Law: one console, one tracking pipeline per site. */
 const SITE_ORDER:ActivitySite[]=['portfolio','scout','mapforyou','law','sph'];
+const SPH_TABS={sales:'영업 발굴',guide:'가이드'} as const;
 const SITE_META={portfolio:{label:ACTIVITY_SITES.portfolio.label,host:ACTIVITY_SITES.portfolio.host,url:ACTIVITY_SITES.portfolio.url,icon:Briefcase,title:'포트폴리오 활동 기록',description:'포트폴리오 방문 위치와 프로젝트 조회 흐름을 한곳에서 확인합니다.',queryLabel:'프로젝트 조회',empty:'포트폴리오 방문 기록이 여기에 표시됩니다.'},scout:{label:ACTIVITY_SITES.scout.label,host:ACTIVITY_SITES.scout.host,url:ACTIVITY_SITES.scout.url,icon:Users,title:'시딩 에이전트 활동 기록',description:'시딩 에이전트의 접속 위치와 대화 요청 흐름을 한곳에서 확인합니다.',queryLabel:'대화 요청',empty:'시딩 에이전트에서 발생한 활동이 여기에 표시됩니다.'},mapforyou:{label:ACTIVITY_SITES.mapforyou.label,host:ACTIVITY_SITES.mapforyou.host,url:ACTIVITY_SITES.mapforyou.url,icon:MapIcon,title:'맛집 지도 활동 기록',description:'지도 방문 위치와 검색, 가게 조회 흐름을 한곳에서 확인합니다.',queryLabel:'검색어',empty:'맛집 지도 방문 기록이 여기에 표시됩니다.'},law:{label:ACTIVITY_SITES.law.label,host:ACTIVITY_SITES.law.host,url:ACTIVITY_SITES.law.url,icon:Scale,title:'법률 서비스 활동 기록',description:'접속 위치와 질문, 서비스 이용 흐름을 한곳에서 확인합니다.',queryLabel:'입력한 질문',empty:'서비스에서 발생한 활동이 여기에 표시됩니다.'},sph:{label:ACTIVITY_SITES.sph.label,host:ACTIVITY_SITES.sph.host,url:ACTIVITY_SITES.sph.url,icon:Activity,title:'SPH 활동 기록',description:'접속과 주요 버튼 클릭을 간단하게 확인합니다.',queryLabel:'검색 적용',empty:'아직 SPH 기록이 없습니다.'}} as const;
 const dateFormatter=new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
 const dateTime=(value:string)=>dateFormatter.format(new Date(value));
@@ -50,6 +51,8 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
  const retryAfter=useRef(0);
  const [autoRefresh,setAutoRefresh]=useState(true);
  const [refreshState,setRefreshState]=useState<ActivityRefreshState>('live');
+ const [sphView,setSphView]=useState<SphView>(initialView.sphView||'sales');
+ const showActivity=site!=='sph'||sphView==='sales';
  const lastResponse=useRef<{key:string;etag:string;report:ActivityReport}|null>(null);
  const endpoint=(suffix:string)=>window.location.pathname.replace(/\/$/,'')+suffix;
  const load=useCallback(async()=>{
@@ -80,10 +83,10 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
  const resetPage=()=>{activeRequest.current?.abort();activeRequest.current=null;lastResponse.current=null;setCursors([null]);setReport(null)};
  const switchSite=(next:ActivitySite)=>{if(next===site)return;resetPage();setSite(next);setSource('database');setAutoRefresh(true);setSearch('');setAppliedSearch('');setAction('all');setLocationFilter('all')};
  useEffect(()=>{
-  const query=activityViewQuery({days,site,source,date:archiveDate,search:'',action,location:locationFilter,newest});
+  const query=activityViewQuery({days,site,source,date:archiveDate,search:'',action,location:locationFilter,newest,sphView});
   window.history.replaceState(window.history.state,'',window.location.pathname+'?'+query);
- },[days,site,source,archiveDate,action,locationFilter,newest]);
- useEffect(()=>{const restore=()=>{const view=parseActivityView(new URLSearchParams(window.location.search));resetPage();setSite(view.site);setDays(view.days);setSource(view.source);setArchiveDate(view.date);setAction(view.action);setLocationFilter(view.location);setNewest(view.newest);setSearch('');setAppliedSearch('')};window.addEventListener('popstate',restore);return()=>window.removeEventListener('popstate',restore)},[]);
+ },[days,site,source,archiveDate,action,locationFilter,newest,sphView]);
+ useEffect(()=>{const restore=()=>{const view=parseActivityView(new URLSearchParams(window.location.search));resetPage();setSite(view.site);setSphView(view.sphView||'sales');setDays(view.days);setSource(view.source);setArchiveDate(view.date);setAction(view.action);setLocationFilter(view.location);setNewest(view.newest);setSearch('');setAppliedSearch('')};window.addEventListener('popstate',restore);return()=>window.removeEventListener('popstate',restore)},[]);
  useEffect(()=>{
   if(typeof document.getElementById!=='function')return;
   const tab=document.getElementById('private-tab-'+site),nav=tab?.parentElement;
@@ -92,16 +95,20 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
   if(selected.left<visible.left)nav.scrollLeft-=visible.left-selected.left+6;
   else if(selected.right>visible.right)nav.scrollLeft+=selected.right-visible.right+6;
  },[site]);
- useEffect(()=>{if(authenticated)void load();return()=>{activeRequest.current?.abort();activeRequest.current=null}},[authenticated,load]);
+ useEffect(()=>{
+  if(authenticated&&showActivity)void load();
+  else if(authenticated)setBusy(false);
+  return()=>{activeRequest.current?.abort();activeRequest.current=null};
+ },[authenticated,showActivity,load]);
  useEffect(()=>{
   // Keep current records live, without moving an older page while it is being read.
-  if(!authenticated||source!=='database'||!autoRefresh||cursor||!newest)return;
+  if(!authenticated||!showActivity||source!=='database'||!autoRefresh||cursor||!newest)return;
   // SPH is a small visit counter: poll at most once per minute, only while this
   // authenticated admin view is active. All other sites keep their existing cadence.
   const refreshGap=site==='sph'?60000:1000;
   const refresh=()=>{if(document.visibilityState==='visible'&&!activeRequest.current&&Date.now()>=retryAfter.current&&Date.now()-lastRead.current>=refreshGap)void load()};
   return watchActivityRefresh(refresh,setRefreshState);
- },[authenticated,source,autoRefresh,cursor,newest,load]);
+ },[authenticated,showActivity,source,autoRefresh,cursor,newest,load]);
  const login=async(event:React.FormEvent)=>{
   event.preventDefault();if(busy)return;setBusy(true);setError('');
   try{const response=await fetch(endpoint('/access'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password})});const data=await response.json();if(!response.ok)throw new Error(data.error||'로그인하지 못했습니다.');setPassword('');setAuthenticated(true)}
@@ -132,13 +139,23 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
  /** The most frequent home-district IP is flagged in both tabs so the owner's own visits stand out. */
  const selfIp=report?.selfIp||'';
  return <main className="private-activity"><div className="private-wrap">
-  <header className="private-header"><div><div className="private-kicker"><span/>PRIVATE WORKSPACE</div><h1>{siteInfo.title}</h1><p>{siteInfo.description} <a className="private-site-link" href={siteInfo.url} target="_blank" rel="noreferrer">{siteInfo.host} ↗</a></p></div><div className="private-actions">
-   <a className="private-button" href="https://sph-field-guide-six.vercel.app/" target="_blank" rel="noopener noreferrer">SPH 서비스 가이드 <ArrowUpRight size={15} aria-hidden="true"/></a>
+  <header className="private-header"><div><div className="private-kicker"><span/>PRIVATE WORKSPACE</div><h1>{siteInfo.title}</h1>{site!=='sph'&&<p>{siteInfo.description} <a className="private-site-link" href={siteInfo.url} target="_blank" rel="noreferrer">{siteInfo.host} ↗</a></p>}</div><div className="private-actions">
    {site!=='sph'&&<button className="private-button" onClick={verify} disabled={verifying||busy} title="이 브라우저의 실제 위치로 구를 한 번 확인하면, 이 IP의 기록이 정확해집니다.">{verifying?<LoaderCircle className="private-spin" size={16}/>:<MapPin size={16}/>}내 위치로 구 확인</button>}
    <button className="private-button" onClick={logout} disabled={busy}><LogOut size={16}/>로그아웃</button>
   </div></header>
   <nav className="private-tabs" role="tablist" aria-label="추적할 사이트">{SITE_ORDER.map(key=>{const info=SITE_META[key],Icon=info.icon;return <button key={key} id={'private-tab-'+key} role="tab" aria-selected={site===key} aria-controls="private-panel" className={'private-tab'+(site===key?' private-tab-active':'')} onClick={()=>switchSite(key)}><Icon size={16}/><span>{info.label}</span><small>{info.host}</small></button>})}</nav>
-  {site==='sph'?<SphActivityPanel
+  {site==='sph'?<section id="private-panel" role="tabpanel" aria-labelledby="private-tab-sph">
+   <nav className="private-tabs sph-service-tabs" role="tablist" aria-label="SPH 서비스" onKeyDown={event=>{
+    if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+    event.preventDefault();
+    const next=event.key==='Home'?'sales':event.key==='End'?'guide':sphView==='sales'?'guide':'sales';
+    setSphView(next);document.getElementById('sph-tab-'+next)?.focus();
+   }}>
+    {(Object.keys(SPH_TABS) as SphView[]).map(key=><button key={key} id={'sph-tab-'+key} type="button" role="tab" aria-selected={sphView===key} aria-controls={'sph-panel-'+key}
+     tabIndex={sphView===key?0:-1} className={'private-tab'+(sphView===key?' private-tab-active':'')} onClick={()=>setSphView(key)}>{SPH_TABS[key]}</button>)}
+   </nav>
+   <section id="sph-panel-sales" role="tabpanel" aria-labelledby="sph-tab-sales" hidden={sphView!=='sales'}>
+   {sphView==='sales'&&<SphActivityPanel
     report={report} busy={busy} error={error} days={days} action={action}
     page={cursors.length} canPrevious={cursors.length>1} canNext={!!report?.nextCursor}
     onDays={next=>{resetPage();setDays(next)}}
@@ -146,7 +163,15 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
     onRefresh={()=>{if(cursor)resetPage();else void load()}}
     onPrevious={()=>{setCursors(values=>values.slice(0,-1));setReport(null)}}
     onNext={()=>{if(report?.nextCursor){setCursors(values=>[...values,report.nextCursor!]);setReport(null)}}}
-  />:<>
+   />}
+   </section>
+   <section id="sph-panel-guide" role="tabpanel" aria-labelledby="sph-tab-guide" hidden={sphView!=='guide'}>
+    {sphView==='guide'&&<div className="sph-guide-card">
+     <div><h2>SPH 서비스 가이드</h2><p>방문·클릭 활동 집계 미설정</p></div>
+     <a className="private-button" href="https://sph-field-guide-six.vercel.app/" target="_blank" rel="noopener noreferrer">가이드 열기 <ArrowUpRight size={15} aria-hidden="true"/></a>
+    </div>}
+   </section>
+  </section>:<>
   {source==='database'&&<div className="private-self-note private-live-status"><label><input type="checkbox" checked={autoRefresh} onChange={event=>setAutoRefresh(event.target.checked)}/>자동 업데이트</label><strong>{!autoRefresh?'자동 업데이트 꺼짐':cursor||!newest?'이전 기록 조회 중 · 자동 업데이트 일시 중지':refreshState==='idle'?'5분 이상 활동 없음 · 자동 업데이트 대기':refreshState==='offline'?'인터넷 연결 대기':'30초마다 새 기록 확인'}</strong><span>{error?'최근 조회 실패 · 표시된 기록은 마지막 성공 기준':busy?'새 기록 확인 중':report?'마지막 확인 '+dateTime(report.generatedAt):'첫 기록 확인 중'} · 한국 시간</span></div>}
   {(site==='portfolio'||site==='law')&&<p className="private-self-note">Portfolio의 Law Map 카드는 프로젝트 소개(/law-project)를 엽니다. 소개 조회·서비스 보기 클릭은 Portfolio에, 실제 법률 서비스 접속은 Law에 기록됩니다. 소개만 조회하면 Law 접속 수는 늘지 않습니다.</p>}
   {verified&&<p className="private-verified" role="status"><MapPin size={15}/>이 브라우저 위치를 {verified}(으)로 확인했습니다. 이 IP의 기록은 정확도 높음으로 표시됩니다.</p>}

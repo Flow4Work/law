@@ -1,6 +1,7 @@
 'use client';
 import {Activity,ArrowDown,Clock3,Globe2,MousePointerClick,RefreshCw,Search,ShieldCheck} from 'lucide-react';
 import {PC_IP,MOBILE_IP} from '@/lib/activity-view';
+import {ACTIVITY_SITES} from '@/lib/activity-types';
 import type {ActivityReport,ActivityEvent} from '@/lib/activity-types';
 import './sph-panel.css';
 
@@ -35,14 +36,14 @@ export function SphActivityPanel({report,busy,error,days,action,page,canPrevious
   {label:'검색 적용',value:report?.queries,icon:Search}
  ];
  return <div className="sph-simple">
-  <div className="sph-simple-title"><div><h2>접속 현황</h2><p>사이트 접속과 주요 버튼 사용 내역</p></div><span>{days===1?'오늘':`최근 ${days}일`} 기준</span></div>
+  <div className="sph-simple-title"><div><h2>영업 발굴 활동 기록</h2><a className="private-site-link" href={ACTIVITY_SITES.sph.url} target="_blank" rel="noopener noreferrer">영업 발굴 열기 ↗</a></div><span>{days===1?'오늘':`최근 ${days}일`} 기준</span></div>
   <div className="private-summary sph-metrics">
    {metrics.map(({label,value,icon:Icon})=><section key={label}>
      <span>{label}<Icon size={17}/></span>
      <strong>{number(value)}</strong>
    </section>)}
   </div>
-  <section className="private-records sph-activity-records" id="private-panel" role="tabpanel" aria-labelledby="private-tab-sph">
+  <section className="private-records sph-activity-records" aria-label="영업 발굴 활동 목록">
    <div className="sph-activity-toolbar">
     <div className="sph-activity-toolbar-heading"><strong>활동 기록</strong><span>{number(report?.total)}건</span></div>
     <div className="private-filters sph-activity-filters">

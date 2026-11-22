@@ -1,7 +1,7 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript');
 const source=ts.transpileModule(fs.readFileSync(path.join(__dirname,'../src/features/private-activity/console.tsx'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
-function mount(overrides={},status=200){
+function mount(overrides={},status=200,initialView={}){
  let stateIndex=0,now=10000,requests=0;const effects=[],intervals=new Set(),listeners={},changes=[],sent=[],exports={};
  const document={visibilityState:'visible',addEventListener:(name,fn)=>listeners[name]=fn,removeEventListener:name=>delete listeners[name]},navigator={onLine:true};
  const window={location:{pathname:'/qa-admin',search:''},history:{replaceState:()=>{}},setInterval:fn=>{intervals.add(fn);return fn},clearInterval:fn=>intervals.delete(fn),addEventListener:(name,fn)=>listeners[name]=fn,removeEventListener:name=>delete listeners[name]};
@@ -10,7 +10,7 @@ function mount(overrides={},status=200){
  class Clock extends Date{static now(){return now}}
  const helper={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname,'../src/lib/activity-refresh.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:helper,window,document,navigator,Date:Clock});
  vm.runInNewContext(source,{exports,require:id=>id==='react'?react:id==='react/jsx-runtime'?{jsx:()=>null,jsxs:()=>null}:id==='lucide-react'?{}:id.includes('activity-refresh')?helper:id.includes('activity-types')?{ACTIVITY_SITES:sites,ACTIVITY_LABELS:{visit:'visit'}}:id.includes('activity-view')?{activityViewQuery:()=>new URLSearchParams(),activityMatches:()=>true}: {},window,document,Date:Clock,Intl,URLSearchParams,AbortController,setTimeout,clearTimeout,fetch:async(url,request)=>{const currentStatus=Array.isArray(status)?status[Math.min(requests,status.length-1)]:status;requests++;sent.push(request);return {status:currentStatus,ok:currentStatus===200,headers:new Headers({'Retry-After':'60','ETag':'"qa-report"','X-Activity-Checked-At':new Date(now).toISOString()}),json:async()=>{assert.notEqual(currentStatus,304,'an unchanged response has no JSON body');return {site:'portfolio',days:1,events:[{id:'preserved-record'}],generatedAt:new Date(now).toISOString(),error:'test failure'}}}}});
- exports.PrivateActivityConsole({initiallyAuthenticated:true,initialView:{site:'portfolio',days:1,action:'all',newest:true,location:'all',source:'database',date:''},archiveAvailable:false});
+ exports.PrivateActivityConsole({initiallyAuthenticated:true,initialView:{site:'portfolio',days:1,action:'all',newest:true,location:'all',source:'database',date:'',...initialView},archiveAvailable:false});
  const cleanups=effects.map(fn=>fn());
  return {intervals,listeners,document,navigator,changes,sent,requests:()=>requests,advance:ms=>now+=ms,tick:()=>intervals.forEach(fn=>fn()),cleanup:()=>cleanups.forEach(fn=>fn?.())};
 }
@@ -20,6 +20,14 @@ test('live console refreshes while visible, refreshes on return, and cancels its
  c.document.visibilityState='hidden';c.advance(30000);c.tick();await flush();assert.equal(c.requests(),2);
  c.document.visibilityState='visible';c.listeners.visibilitychange();await flush();assert.equal(c.requests(),3);
  c.cleanup();assert.equal(c.intervals.size,0);assert.equal(c.listeners.focus,undefined);assert.equal(c.listeners.online,undefined);
+});
+
+test('the SPH guide tab does not load or refresh sales activity',async()=>{
+ const guide=mount({},200,{site:'sph',sphView:'guide'});
+ await flush();
+ assert.equal(guide.requests(),0);
+ assert.equal(guide.intervals.size,0);
+ guide.cleanup();
 });
 test('unchanged reports send a conditional request, preserve records and update the checked time',async()=>{
  const c=mount({},[200,304]);await flush();c.advance(30000);c.tick();await flush();
