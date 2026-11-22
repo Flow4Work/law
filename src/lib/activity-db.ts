@@ -37,8 +37,9 @@ export async function appendDatabaseActivities(events:ActivityEvent[]){
    privateIpKey('visitor|'+(event.visitorId||event.ip)),event.country,event.district,encryptActivity(event));
   return '('+Array.from({length:9},(_,j)=>'$'+(i*9+j+1)).join(',')+')';
  });
- await database().query(`INSERT INTO law_activity.events(id,at,site,action,ip_key,visitor_key,country,district,payload)
- VALUES ${tuples.join(',')} ON CONFLICT(id) DO NOTHING`,params);
+ const inserted=await database().query(`INSERT INTO law_activity.events(id,at,site,action,ip_key,visitor_key,country,district,payload)
+ VALUES ${tuples.join(',')} ON CONFLICT(id) DO NOTHING RETURNING action`,params);
+ return inserted.map(row=>row.action);
 }
 export type ActivityPage={at:string;id:string};
 export function decodeActivityCursor(value:string|null):ActivityPage|null{

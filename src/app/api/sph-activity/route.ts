@@ -55,7 +55,8 @@ export async function POST(request:Request){
  });
  try{
   if(!await claimDatabaseAttempt(ip,'sph',15))return new Response(null,{status:429,headers:{...headers,'Retry-After':'60'}});
-  await appendDatabaseActivities(events);
+  const inserted=await appendDatabaseActivities(events);
+  if(inserted.length)console.info('[sph-activity] stored',inserted.join(','));
   return new Response(null,{status:204,headers});
  }catch{console.warn('[sph-activity] Minimal activity storage unavailable');return new Response(null,{status:503,headers})}
 }
