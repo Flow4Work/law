@@ -76,9 +76,9 @@ export function SphGuidePanel({days,onDays,onSessionExpired}:{days:number;onDays
     <thead><tr><th scope="col">발생 시간 (KST)</th><th scope="col">IP 주소</th><th scope="col">활동</th><th scope="col">클릭 항목 · 입력 내용</th></tr></thead>
     <tbody>{visible.map(event=><tr key={event.id}>
      <td className="private-time"><time dateTime={event.at}>{clock.format(new Date(event.at))}</time></td>
-     <td className="sph-guide-ip"><code>{event.ip||'확인 불가'}</code>{activityDeviceLabel(event.ip)&&<span className="private-self-tag" title="등록된 관리자 IP">{activityDeviceLabel(event.ip)}</span>}{(event.city||event.country)&&<small>{[event.country,event.city].filter(Boolean).join(' · ')}</small>}</td>
+     <td className="sph-guide-ip"><div className="sph-guide-ip-line"><code>{event.ip||'확인 불가'}</code>{activityDeviceLabel(event.ip)&&<span className="private-self-tag" title="등록된 관리자 IP">{activityDeviceLabel(event.ip)}</span>}{(event.city||event.country)&&<small title="접속 지역">{[event.country,event.city].filter(Boolean).join(' · ')}</small>}</div></td>
      <td><span className="sph-guide-action">{GUIDE_ACTIVITY_LABELS[event.action]||event.action}</span></td>
-     <td className="sph-guide-detail">{event.detail?event.detail:<span className="sph-guide-missing">세부 내용 미전송</span>}</td>
+     <td className="sph-guide-detail">{event.detail?<span className="sph-guide-detail-text" title={event.detail}>{event.detail}</span>:<span className="sph-guide-missing">세부 내용 미전송</span>}</td>
     </tr>)}</tbody>
    </table>{!visible.length&&<div className="private-empty" role="status"><strong>{loading&&!report?'활동 기록을 불러오는 중입니다.':error?'조회에 실패했습니다.':find||actionFilter!=='all'?'검색 조건에 맞는 기록이 없습니다.':'아직 상세 활동 기록이 없습니다.'}</strong><span>상세 내역은 기록 기능 업데이트 이후부터 표시됩니다.</span></div>}</div>
    <div className="sph-records-footer"><span>{number.format(visible.length)}건 표시 · 최대 100건 조회</span><span>{report?'마지막 조회 '+clock.format(new Date(report.generatedAt)):'—'} · 한국 시간</span></div>
