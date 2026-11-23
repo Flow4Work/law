@@ -43,18 +43,16 @@ test('SPH encrypts visitor IP and fixed-label events without Blob calls',async()
  }finally{await db.close()}
 });
 
-test('guide records timestamped encrypted IP, submitted text and button actions, deduplicates retries, no Blob',async()=>{
+test('guide activity reports daily counts without personal data and deduplicates retried events',async()=>{
  const {NextRequest}=require('next/server');
  const db=new PGlite();
  await db.exec(fs.readFileSync(path.join(root,'migrations/001-private-activity.sql'),'utf8'));
- let blobCalls=0;
- const load=loader({'@neondatabase/serverless':{neon:()=>({query:async(sql,args)=>(await db.query(sql,args)).rows})},'@vercel/blob':new Proxy({}, {get(){blobCalls++;throw Error('Blob prohibited')}})});
+ const load=loader({'@neondatabase/serverless':{neon:()=>({query:async(sql,args)=>(await db.query(sql,args)).rows})}});
  const intake=load('src/app/api/sph-guide-activity/route.ts');
  const reports=load('src/app/[adminPath]/guide-events/route.ts');
  const cipher=load('src/lib/activity-crypto.ts');
  const origin='https://sph-field-guide-six.vercel.app';
- const visitorId=crypto.randomUUID();
- const events=['visit','service','example','query','click'].map(action=>({id:crypto.randomUUID(),visitorId,action,at:new Date().toISOString(),detail:action==='query'?'보고서 문의 test@example.com':action==='click'?'시각화 탭':'Google Maps'}));
+ const events=['visit','service','example','query'].map(action=>({id:crypto.randomUUID(),action}));
  const post=(items,source=origin)=>intake.POST(new Request('https://law-lake-theta.vercel.app/api/sph-guide-activity',{
   method:'POST',headers:{origin:source,'x-vercel-forwarded-for':'203.0.113.44'},body:JSON.stringify({events:items})
  }));
@@ -66,24 +64,16 @@ test('guide records timestamped encrypted IP, submitted text and button actions,
   assert.equal((await post(events)).status,204);
   assert.equal((await post(events)).status,204);
   const stored=(await db.query("SELECT ip_key, visitor_key, payload FROM law_activity.events WHERE site='sph-guide'")).rows;
-  assert.equal(stored.length,5);
-  assert(stored.every(row=>row.ip_key!==''&&row.visitor_key!==''&&row.payload!==''));
-  assert(!JSON.stringify(stored).includes('203.0.113.44'));
-  assert(!JSON.stringify(stored).includes('보고서 문의'));
-  assert.equal(blobCalls,0);
+  assert.equal(stored.length,4);
+  assert(stored.every(row=>row.ip_key===''&&row.visitor_key===''&&row.payload===''));
   assert.equal((await reports.GET(new NextRequest(reportUrl),context)).status,401);
   const signedIn=new NextRequest(reportUrl,{headers:{cookie:cipher.ADMIN_COOKIE+'='+cipher.createAdminSession()}});
   const result=await reports.GET(signedIn,context);
   assert.equal(result.status,200);
-  const {rows,events:recorded}=await result.json();
+  const {rows}=await result.json();
   assert.equal(rows.length,1);
   const {date,...counts}=rows[0];
   assert.match(date,/^\d{4}-\d{2}-\d{2}$/);
-  assert.deepEqual(counts,{visit:1,service:1,example:1,query:1,click:1});
-  assert.equal(recorded.length,5);
-  assert(recorded.every(item=>item.ip==='203.0.113.44'&&Number.isFinite(Date.parse(item.at))));
-  assert(recorded.some(item=>item.action==='click'&&item.detail==='시각화 탭'));
-  assert(recorded.some(item=>item.action==='query'&&item.detail.includes('[이메일]')));
-  assert.equal(blobCalls,0);
+  assert.deepEqual(counts,{visit:1,service:1,example:1,query:1});
  }finally{await db.close()}
 });
