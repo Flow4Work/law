@@ -4,8 +4,8 @@ export type ActivityFilters={search:string;action:string;location:string;newest:
 export type SphView='sales'|'guide';
 export type ActivityView=ActivityFilters&{site:ActivitySite;days:number;source:'database'|'archive';date:string;sphView?:SphView};
 export const defaultActivityFilters:ActivityFilters={search:'',action:'all',location:'all',newest:true};
-export const PC_IP='175.193.2.26',MOBILE_IP='211.234.207.181';
-export const activityDeviceLabel=(ip:string)=>ip===PC_IP?'내 PC':ip===MOBILE_IP?'내 핸드폰':'';
+export const PC_IP='175.193.2.26',MOBILE_IP='211.234.207.181',OWNER_IP='14.40.72.231';
+export const activityDeviceLabel=(ip:string)=>ip===OWNER_IP?'내 IP':ip===PC_IP?'내 PC':ip===MOBILE_IP?'내 핸드폰':'';
 export function parseActivityView(query:URLSearchParams):ActivityView{
  const site=query.get('site'),days=Number(query.get('days')||1),action=query.get('action')||'all',location=query.get('location')||'all';
  const date=query.get('date')||new Date(Date.now()+9*3600000).toISOString().slice(0,10);

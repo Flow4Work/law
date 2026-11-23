@@ -12,6 +12,14 @@ function loader(overrides={}){
   vm.runInNewContext(output,{exports,require:id=>id==='server-only'?{}:overrides[id]||(id.startsWith('@/geo/')?require(path.join(root,'src/geo',id.slice(6))):id.startsWith('@/lib/')?load('src/lib/'+id.slice(6)+'.ts'):id.startsWith('./')?load(path.relative(root,path.resolve(path.dirname(file),id+'.ts'))):require(id)),process:{env,cwd:()=>root},Buffer,Uint8Array,Request,Response,Headers,URL,URLSearchParams,Date,AbortController,setTimeout,clearTimeout,console});return exports;
  }return load;
 }
+test('registered owner IP is consistently labeled without changing stored events',()=>{
+ const {OWNER_IP,activityDeviceLabel}=loader()('src/lib/activity-view.ts');
+ assert.equal(OWNER_IP,'14.40.72.231');
+ assert.equal(activityDeviceLabel(OWNER_IP),'내 IP');
+ assert.equal(activityDeviceLabel('175.193.2.26'),'내 PC');
+ assert.equal(activityDeviceLabel('211.234.207.181'),'내 핸드폰');
+ assert.equal(activityDeviceLabel('203.0.113.44'),'');
+});
 test('SPH encrypts visitor IP and fixed-label events without Blob calls',async()=>{
  const db=new PGlite();await db.exec(fs.readFileSync(path.join(root,'migrations/001-private-activity.sql'),'utf8'));
  let blobCalls=0,dbQueries=0;

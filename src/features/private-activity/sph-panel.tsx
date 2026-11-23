@@ -1,6 +1,6 @@
 'use client';
 import {Activity,ArrowDown,Clock3,Globe2,MousePointerClick,RefreshCw,Search,ShieldCheck} from 'lucide-react';
-import {PC_IP,MOBILE_IP} from '@/lib/activity-view';
+import {PC_IP,MOBILE_IP,OWNER_IP} from '@/lib/activity-view';
 import {ACTIVITY_SITES} from '@/lib/activity-types';
 import type {ActivityReport,ActivityEvent} from '@/lib/activity-types';
 import './sph-panel.css';
@@ -20,6 +20,7 @@ const knownIp=(value:string)=>Boolean(value&&value!=='확인 불가'&&value!=='1
 function ownerLabel(ip:string,viewerIp:string|undefined){
  if(!ip)return {text:'이전 기록',kind:'unknown',explain:'이 기록은 IP 수집을 시작하기 전에 저장됐습니다.'};
  if(!knownIp(ip))return {text:'IP 확인 불가',kind:'unknown',explain:'이 요청의 방문자 IP를 확인하지 못했습니다.'};
+ if(ip===OWNER_IP)return {text:'내 IP',kind:'mine',explain:'관리자가 직접 지정한 본인 IP입니다.'};
  if(ip===viewerIp)return {text:'현재 내 IP',kind:'mine',explain:'지금 이 관리자 화면에 접속한 IP와 같습니다.'};
  if(ip===PC_IP)return {text:'내 PC',kind:'mine',explain:'기존 관리자에 등록한 PC IP와 같습니다.'};
  if(ip===MOBILE_IP)return {text:'내 휴대폰',kind:'mine',explain:'기존 관리자에 등록한 휴대폰 IP와 같습니다.'};

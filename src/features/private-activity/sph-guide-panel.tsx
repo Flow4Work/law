@@ -3,6 +3,7 @@
 import {useEffect,useState} from 'react';
 import {ArrowUpRight,RefreshCw,Search} from 'lucide-react';
 import {GUIDE_ACTIVITY_LABELS,type GuideAction,type GuideActivityDay,type GuideActivityRecord} from '@/lib/activity-types';
+import {activityDeviceLabel} from '@/lib/activity-view';
 
 const actions=Object.keys(GUIDE_ACTIVITY_LABELS) as GuideAction[];
 const number=new Intl.NumberFormat('ko-KR');
@@ -39,7 +40,7 @@ export function SphGuidePanel({days,onDays,onSessionExpired}:{days:number;onDays
  const events=report?.events||[];
  const find=keyword.trim().toLocaleLowerCase('ko-KR');
  const visible=events.filter(event=>(actionFilter==='all'||event.action===actionFilter)&&
-  (!find||[event.ip,event.detail,GUIDE_ACTIVITY_LABELS[event.action],event.city,event.country].join(' ').toLocaleLowerCase('ko-KR').includes(find)));
+  (!find||[event.ip,activityDeviceLabel(event.ip),event.detail,GUIDE_ACTIVITY_LABELS[event.action],event.city,event.country].join(' ').toLocaleLowerCase('ko-KR').includes(find)));
  return <div className="sph-simple">
   <div className="sph-simple-title">
    <div><h2>SPH 서비스 가이드 활동 기록</h2>
@@ -75,7 +76,7 @@ export function SphGuidePanel({days,onDays,onSessionExpired}:{days:number;onDays
     <thead><tr><th scope="col">발생 시간 (KST)</th><th scope="col">IP 주소</th><th scope="col">활동</th><th scope="col">클릭 항목 · 입력 내용</th></tr></thead>
     <tbody>{visible.map(event=><tr key={event.id}>
      <td className="private-time"><time dateTime={event.at}>{clock.format(new Date(event.at))}</time></td>
-     <td className="sph-guide-ip"><code>{event.ip||'확인 불가'}</code>{(event.city||event.country)&&<small>{[event.country,event.city].filter(Boolean).join(' · ')}</small>}</td>
+     <td className="sph-guide-ip"><code>{event.ip||'확인 불가'}</code>{activityDeviceLabel(event.ip)&&<span className="private-self-tag" title="등록된 관리자 IP">{activityDeviceLabel(event.ip)}</span>}{(event.city||event.country)&&<small>{[event.country,event.city].filter(Boolean).join(' · ')}</small>}</td>
      <td><span className="sph-guide-action">{GUIDE_ACTIVITY_LABELS[event.action]||event.action}</span></td>
      <td className="sph-guide-detail">{event.detail?event.detail:<span className="sph-guide-missing">세부 내용 미전송</span>}</td>
     </tr>)}</tbody>

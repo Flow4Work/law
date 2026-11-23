@@ -6,7 +6,7 @@ import './console.css';
 import {SphActivityPanel} from './sph-panel';
 import {SphGuidePanel} from './sph-guide-panel';
 import {watchActivityRefresh,type ActivityRefreshState} from '@/lib/activity-refresh';
-import {activityMatches,activityViewQuery,parseActivityView,PC_IP,MOBILE_IP,activityDeviceLabel,type ActivityView,type SphView} from '@/lib/activity-view';
+import {activityMatches,activityViewQuery,parseActivityView,PC_IP,MOBILE_IP,OWNER_IP,activityDeviceLabel,type ActivityView,type SphView} from '@/lib/activity-view';
 /** Portfolio, Scout, MapForYou, then Law: one console, one tracking pipeline per site. */
 const SITE_ORDER:ActivitySite[]=['portfolio','scout','mapforyou','law','sph'];
 const SPH_TABS={sales:'영업 발굴',guide:'가이드'} as const;
@@ -179,6 +179,7 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
   {source==='archive'&&!archiveAvailable&&<p className="private-verified" role="status">과거 암호화 기록은 기존 계정에 그대로 보존되어 있습니다. 현재 관리자에는 연결되지 않았으며 Blob 조회는 실행하지 않습니다.</p>}
   {source==='database'&&report?.recordedFrom&&<p className="private-self-note">신규 DB 수집 기록: {dateTime(report.recordedFrom)} 이후 · 이전 Blob 기록은 별도 보존</p>}
   {!!report?.regions?.length&&<details className="private-region-summary"><summary>지역별 활동 통계 · {report.regions.length}개 지역</summary><ul>{report.regions.map(region=><li key={region.country+'|'+region.district}>{region.country&&/^[A-Z]{2}$/.test(region.country)?countryNames.of(region.country):'국가 미확인'} · {region.district||'구 정보 없음'} <strong>{number(region.total)}건</strong></li>)}</ul></details>}
+  <p className="private-self-note"><span className="private-self-tag">내 IP</span><strong>{OWNER_IP}</strong><span>직접 지정한 본인 IP입니다. 활동 기록에서 같은 IP에 표시합니다.</span></p>
   <p className="private-self-note"><span className="private-self-tag">내 PC</span><strong>{PC_IP}</strong><span>등록한 PC 접속 IP입니다. 네 탭의 같은 IP에 표시합니다.{report?.viewerIp===PC_IP?' 현재 관리자 접속 IP와 일치합니다.':''}</span></p>
   {selfIp&&selfIp!==PC_IP&&selfIp!==MOBILE_IP&&<p className="private-self-note"><span className="private-self-tag">내 접속</span><strong>{selfIp}</strong><span>광진구에서 가장 자주 기록된 IP입니다. Portfolio·Scout·MapForYou·Law 네 탭 모두 같은 IP에 표시합니다.</span></p>}
   <p className="private-self-note"><span className="private-self-tag">내 핸드폰</span><strong>{MOBILE_IP}</strong><span>직접 확인한 핸드폰 IP입니다. 네 탭의 같은 IP에 별도 표시합니다.</span></p>
