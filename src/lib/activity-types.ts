@@ -1,5 +1,8 @@
 export const ACTIVITY_LABELS={visit:'서비스 접속',query:'질문 입력',answer:'확인 질문 응답',new_case:'새 대화',example:'예시 선택',view_step:'상세 보기',click:'버튼 클릭',model:'모델 선택',settings:'설정 열기',sources:'공식 자료 보기',map_update:'지도 업데이트',map_start:'절차 펼치기',location:'위치 확인'} as const;
 export type ActivityAction=keyof typeof ACTIVITY_LABELS;
+export const GUIDE_ACTIVITY_LABELS={visit:'방문',service:'서비스 선택',example:'예시 선택',query:'질문 전송'} as const;
+export type GuideAction=keyof typeof GUIDE_ACTIVITY_LABELS;
+export type GuideActivityDay={date:string}&Record<GuideAction,number>;
 export type ActivityDistrictSource='verified'|'ip-city'|'ip-postal'|'ip-coordinate'|'geo-city'|'geo-postal'|'geo-coordinate'|'unavailable';
 export type ActivityConfidence='high'|'medium'|'low';
 /** Which tracked site produced a record. Records saved before multi-site tracking are Law. */

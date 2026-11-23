@@ -1,8 +1,8 @@
 /* A compact, aligned view. All styling is scoped to the SPH tab. */
 .sph-service-tabs{margin:0 0 18px}
-.sph-guide-card{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;padding:18px;border:1px solid #e0e5e7;border-radius:10px;background:#fff}
-.sph-guide-card h2{margin:0 0 4px;font-size:17px;color:#18252c}
-.sph-guide-card p{margin:0;color:#6d7b84;font-size:12px}
+.private-records .sph-guide-table{min-width:400px}
+.private-records .sph-guide-table th:nth-child(n){width:auto}
+.sph-simple-title .private-site-link svg{vertical-align:-2px}
 .sph-simple{width:100%;max-width:none;margin:0;padding:0}
 .sph-simple-title{display:flex;align-items:flex-end;justify-content:space-between;gap:15px;margin:0 0 14px}
 .sph-simple-title h2{font-size:17px;line-height:1.4;font-weight:700;letter-spacing:-.4px;margin:0 0 3px;color:#18252c}

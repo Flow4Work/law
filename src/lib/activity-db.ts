@@ -1,7 +1,7 @@
 import 'server-only';
 import {neon} from '@neondatabase/serverless';
 import {decryptActivity,encryptActivity,privateIpKey} from './activity-crypto';
-import type {ActivityEvent,ActivityReport,ActivitySite,ActivityLocationSnapshot} from './activity-types';
+import type {ActivityEvent,ActivityReport,ActivitySite,ActivityLocationSnapshot,GuideAction,GuideActivityDay} from './activity-types';
 import {activityMatches,defaultActivityFilters,type ActivityFilters} from './activity-view';
 
 export const activityDatabaseConfigured=()=>!!process.env.LEGAL_ACTIVITY_DATABASE_URL;
@@ -40,6 +40,30 @@ export async function appendDatabaseActivities(events:ActivityEvent[]){
  const inserted=await database().query(`INSERT INTO law_activity.events(id,at,site,action,ip_key,visitor_key,country,district,payload)
  VALUES ${tuples.join(',')} ON CONFLICT(id) DO NOTHING RETURNING action`,params);
  return inserted.map(row=>row.action);
+}
+function koreanDayStart(daysAgo=0){
+ const date=new Date(Date.now()+(9*3600000)-(daysAgo*86400000));
+ return date.toISOString().slice(0,10)+'T00:00:00+09:00';
+}
+export async function appendGuideActivities(events:{id:string;action:GuideAction}[]){
+ const params=[koreanDayStart()];
+ const tuples=events.map(({id,action})=>{
+  params.push('guide:'+id,action);
+  return `($${params.length-1},$1,'sph-guide',$${params.length},'','','','','')`;
+ });
+ const inserted=await database().query(`INSERT INTO law_activity.events (id,at,site,action,ip_key,visitor_key,country,district,payload)
+ VALUES ${tuples.join(',')} ON CONFLICT(id) DO NOTHING RETURNING action`,params);
+ return inserted.map(row=>row.action);
+}
+export async function readGuideActivity(days:number):Promise<GuideActivityDay[]>{
+ const rows=await database().query(`SELECT to_char(at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD') date,
+  count(*) FILTER (WHERE action='visit')::int visit,
+  count(*) FILTER (WHERE action='service')::int service,
+  count(*) FILTER (WHERE action='example')::int example,
+  count(*) FILTER (WHERE action='query')::int query
+  FROM law_activity.events WHERE site='sph-guide' AND at >= $1 AND at <= now()
+  GROUP BY 1 ORDER BY 1 DESC`,[koreanDayStart(days-1)]);
+ return rows as GuideActivityDay[];
 }
 export type ActivityPage={at:string;id:string};
 export function decodeActivityCursor(value:string|null):ActivityPage|null{
@@ -92,7 +116,7 @@ export async function saveDatabaseLocation(ip:string,kind:'verified'|'location',
  ON CONFLICT(key,kind) DO UPDATE SET payload=EXCLUDED.payload,expires=EXCLUDED.expires`,
  [privateIpKey(ip),kind,encryptActivity(value),kind==='location'?new Date(Date.now()+86400000).toISOString():null]);
 }
-export async function claimDatabaseAttempt(ip:string,kind:'login'|'event'|'report'|'sph',maximum:number){
+export async function claimDatabaseAttempt(ip:string,kind:'login'|'event'|'report'|'sph'|'sph-guide',maximum:number){
  const seconds=kind==='login'?600:60;
  const rows=await database().query('SELECT law_activity.allow_request($1,$2,$3) allowed',[kind+'|'+privateIpKey(ip),Math.floor(Date.now()/(seconds*1000))*seconds,maximum]);
  return rows[0]?.allowed===true;

@@ -1,9 +1,10 @@
 'use client';
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {Activity,ArrowDown,ArrowUp,ArrowUpRight,Briefcase,Clock3,Globe2,KeyRound,LoaderCircle,LogOut,Map as MapIcon,MapPin,RefreshCw,Scale,Search,ShieldCheck,Users} from 'lucide-react';
+import {Activity,ArrowDown,ArrowUp,Briefcase,Clock3,Globe2,KeyRound,LoaderCircle,LogOut,Map as MapIcon,MapPin,RefreshCw,Scale,Search,ShieldCheck,Users} from 'lucide-react';
 import {ACTIVITY_LABELS,ACTIVITY_SITES,type ActivityReport,type ActivityAction,type ActivityConfidence,type ActivityEvent,type ActivitySite} from '@/lib/activity-types';
 import './console.css';
 import {SphActivityPanel} from './sph-panel';
+import {SphGuidePanel} from './sph-guide-panel';
 import {watchActivityRefresh,type ActivityRefreshState} from '@/lib/activity-refresh';
 import {activityMatches,activityViewQuery,parseActivityView,PC_IP,MOBILE_IP,activityDeviceLabel,type ActivityView,type SphView} from '@/lib/activity-view';
 /** Portfolio, Scout, MapForYou, then Law: one console, one tracking pipeline per site. */
@@ -53,6 +54,7 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
  const [refreshState,setRefreshState]=useState<ActivityRefreshState>('live');
  const [sphView,setSphView]=useState<SphView>(initialView.sphView||'sales');
  const showActivity=site!=='sph'||sphView==='sales';
+ const expireSession=useCallback(()=>setAuthenticated(false),[]);
  const lastResponse=useRef<{key:string;etag:string;report:ActivityReport}|null>(null);
  const endpoint=(suffix:string)=>window.location.pathname.replace(/\/$/,'')+suffix;
  const load=useCallback(async()=>{
@@ -166,10 +168,7 @@ export function PrivateActivityConsole({initiallyAuthenticated,initialView,archi
    />}
    </section>
    <section id="sph-panel-guide" role="tabpanel" aria-labelledby="sph-tab-guide" hidden={sphView!=='guide'}>
-    {sphView==='guide'&&<div className="sph-guide-card">
-     <div><h2>SPH 서비스 가이드</h2><p>방문·클릭 활동 집계 미설정</p></div>
-     <a className="private-button" href="https://sph-field-guide-six.vercel.app/" target="_blank" rel="noopener noreferrer">가이드 열기 <ArrowUpRight size={15} aria-hidden="true"/></a>
-    </div>}
+    {sphView==='guide'&&<SphGuidePanel days={days} onDays={next=>{resetPage();setDays(next)}} onSessionExpired={expireSession}/>}
    </section>
   </section>:<>
   {source==='database'&&<div className="private-self-note private-live-status"><label><input type="checkbox" checked={autoRefresh} onChange={event=>setAutoRefresh(event.target.checked)}/>자동 업데이트</label><strong>{!autoRefresh?'자동 업데이트 꺼짐':cursor||!newest?'이전 기록 조회 중 · 자동 업데이트 일시 중지':refreshState==='idle'?'5분 이상 활동 없음 · 자동 업데이트 대기':refreshState==='offline'?'인터넷 연결 대기':'30초마다 새 기록 확인'}</strong><span>{error?'최근 조회 실패 · 표시된 기록은 마지막 성공 기준':busy?'새 기록 확인 중':report?'마지막 확인 '+dateTime(report.generatedAt):'첫 기록 확인 중'} · 한국 시간</span></div>}
