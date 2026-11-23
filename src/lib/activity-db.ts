@@ -1,7 +1,7 @@
 import 'server-only';
 import {neon} from '@neondatabase/serverless';
 import {decryptActivity,encryptActivity,privateIpKey} from './activity-crypto';
-import type {ActivityEvent,ActivityReport,ActivitySite,ActivityLocationSnapshot,GuideAction,GuideActivityDay} from './activity-types';
+import type {ActivityEvent,ActivityReport,ActivitySite,ActivityLocationSnapshot,GuideAction,GuideActivityDay,GuideActivityRecord} from './activity-types';
 import {activityMatches,defaultActivityFilters,type ActivityFilters} from './activity-view';
 
 export const activityDatabaseConfigured=()=>!!process.env.LEGAL_ACTIVITY_DATABASE_URL;
@@ -45,26 +45,43 @@ function koreanDayStart(daysAgo=0){
  const date=new Date(Date.now()+(9*3600000)-(daysAgo*86400000));
  return date.toISOString().slice(0,10)+'T00:00:00+09:00';
 }
-export async function appendGuideActivities(events:{id:string;action:GuideAction}[]){
- const params=[koreanDayStart()];
- const tuples=events.map(({id,action})=>{
-  params.push('guide:'+id,action);
-  return `($${params.length-1},$1,'sph-guide',$${params.length},'','','','','')`;
+export type GuideIncomingEvent={id:string;action:GuideAction;detail:string;visitorId:string;at:string};
+export async function appendGuideActivities(events:GuideIncomingEvent[],address:{ip:string;ipVersion:string},country:string,city:string){
+ if(!events.length||events.length>5)throw new Error('Invalid guide batch');
+ const params:string[]=[];
+ const tuples=events.map((item,i)=>{
+  const record:GuideActivityRecord={...item,ip:address.ip,ipVersion:address.ipVersion,page:'/',country,city};
+  params.push('guide:'+item.id,item.at,'sph-guide',item.action,privateIpKey(address.ip),
+   privateIpKey('guide-visitor|'+item.visitorId),country,'',encryptActivity(record));
+  return '('+Array.from({length:9},(_,j)=>'$'+(i*9+j+1)).join(',')+')';
  });
- const inserted=await database().query(`INSERT INTO law_activity.events (id,at,site,action,ip_key,visitor_key,country,district,payload)
- VALUES ${tuples.join(',')} ON CONFLICT(id) DO NOTHING RETURNING action`,params);
+ const inserted=await database().query(
+  'INSERT INTO law_activity.events(id,at,site,action,ip_key,visitor_key,country,district,payload) VALUES '+
+  tuples.join(',')+' ON CONFLICT(id) DO NOTHING RETURNING action',params);
  return inserted.map(row=>row.action);
 }
-export async function readGuideActivity(days:number):Promise<GuideActivityDay[]>{
- const rows=await database().query(`SELECT to_char(at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD') date,
-  count(*) FILTER (WHERE action='visit')::int visit,
-  count(*) FILTER (WHERE action='service')::int service,
-  count(*) FILTER (WHERE action='example')::int example,
-  count(*) FILTER (WHERE action='query')::int query
-  FROM law_activity.events WHERE site='sph-guide' AND at >= $1 AND at <= now()
-  AND action IN ('visit','service','example','query')
-  GROUP BY 1 ORDER BY 1 DESC`,[koreanDayStart(days-1)]);
- return rows as GuideActivityDay[];
+export async function readGuideActivity(days:number):Promise<{rows:GuideActivityDay[];events:GuideActivityRecord[]}>{
+ const start=koreanDayStart(days-1);
+ // Counts are computed in Postgres; only the last 100 encrypted records are decrypted.
+ // Both queries use the existing site/time index. No Blob reads or location lookups.
+ const [rows,detailRows]=await Promise.all([
+  database().query("SELECT to_char(at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD') date,"+
+   " count(*) FILTER (WHERE action='visit')::int visit,"+
+   " count(*) FILTER (WHERE action='service')::int service,"+
+   " count(*) FILTER (WHERE action='example')::int example,"+
+   " count(*) FILTER (WHERE action='query')::int query,"+
+   " count(*) FILTER (WHERE action='click')::int click"+
+   " FROM law_activity.events WHERE site='sph-guide' AND at >= $1 AND at <= now()"+
+   " GROUP BY 1 ORDER BY 1 DESC",[start]),
+  database().query("SELECT payload FROM law_activity.events WHERE site='sph-guide'"+
+   " AND at >= $1 AND at <= now() AND payload<>''"+
+   " ORDER BY at DESC,id DESC LIMIT 100",[start])
+ ]);
+ const records:GuideActivityRecord[]=[];
+ for(const row of detailRows){
+  try{const event=decryptActivity<GuideActivityRecord>(row.payload);if(event&&event.at&&event.action)records.push(event)}catch{/* Keep other records visible if one row is corrupted. */}
+ }
+ return {rows:rows as GuideActivityDay[],events:records};
 }
 export type ActivityPage={at:string;id:string};
 export function decodeActivityCursor(value:string|null):ActivityPage|null{

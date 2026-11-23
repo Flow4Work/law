@@ -15,8 +15,8 @@ export async function GET(request:NextRequest,{params}:{params:Promise<{adminPat
  const days=Number(request.nextUrl.searchParams.get('days')||1);
  if(![1,7,30].includes(days))return NextResponse.json({error:'조회 기간을 확인해 주세요.'},{status:400,headers});
  try{
-  const rows=!activityDatabaseConfigured()&&process.env.VERCEL!=='1'?[]:await readGuideActivity(days);
-  return NextResponse.json({rows,generatedAt:new Date().toISOString()},{headers});
+  const report=!activityDatabaseConfigured()&&process.env.VERCEL!=='1'?{rows:[],events:[]}:await readGuideActivity(days);
+  return NextResponse.json({...report,generatedAt:new Date().toISOString()},{headers});
  }catch{
   console.warn('[sph-guide-activity] Report lookup failed');
   return NextResponse.json({error:'가이드 활동을 불러오지 못했습니다.'},{status:503,headers});
