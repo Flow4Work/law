@@ -4,6 +4,7 @@ import {useEffect,useState} from 'react';
 import {ArrowUpRight,RefreshCw,Search} from 'lucide-react';
 import {GUIDE_ACTIVITY_LABELS,type GuideAction,type GuideActivityDay,type GuideActivityRecord} from '@/lib/activity-types';
 import {activityDeviceLabel} from '@/lib/activity-view';
+import {watchActivityRefresh} from '@/lib/activity-refresh';
 
 const actions=Object.keys(GUIDE_ACTIVITY_LABELS) as GuideAction[];
 const number=new Intl.NumberFormat('ko-KR');
@@ -14,28 +15,46 @@ const clock=new Intl.DateTimeFormat('ko-KR',{
 type Report={rows:GuideActivityDay[];events:GuideActivityRecord[];generatedAt:string};
 
 export function SphGuidePanel({days,onDays,onSessionExpired}:{days:number;onDays:(days:number)=>void;onSessionExpired:()=>void}){
- const [report,setReport]=useState<Report|null>(null);
+ const [result,setResult]=useState<{days:number;report:Report}|null>(null);
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState('');
  const [refresh,setRefresh]=useState(0);
  const [keyword,setKeyword]=useState('');
  const [actionFilter,setActionFilter]=useState('all');
  useEffect(()=>{
-  const controller=new AbortController();
-  setLoading(true);setError('');
   const location=window.location.pathname.replace(/\/$/,'');
-  fetch(location+'/guide-events?days='+days,{cache:'no-store',signal:controller.signal})
-   .then(async response=>{
+  let active:AbortController|null=null;
+  let lastRead=0;
+  let disposed=false;
+  async function load(interactive=false){
+   if(active)return;
+   const controller=new AbortController();
+   active=controller;
+   lastRead=Date.now();
+   if(interactive)setLoading(true);
+   setError('');
+   const timeout=window.setTimeout(()=>controller.abort(),15000);
+   try{
+    const response=await fetch(location+'/guide-events?days='+days,{cache:'no-store',signal:controller.signal});
+    if(disposed)return;
     if(response.status===401){onSessionExpired();return;}
     if(!response.ok)throw new Error();
-    const result=await response.json() as Report;
-    if(!controller.signal.aborted)setReport(result);
-   })
-   .catch(()=>{if(!controller.signal.aborted)setError('가이드 활동을 불러오지 못했습니다. 다시 시도해 주세요.');})
-   .finally(()=>{if(!controller.signal.aborted)setLoading(false);});
-  return()=>controller.abort();
+    const report=await response.json() as Report;
+    if(!disposed)setResult({days,report});
+   }catch{
+    if(!disposed)setError('가이드 활동을 불러오지 못했습니다. 다시 시도해 주세요.');
+   }finally{
+    window.clearTimeout(timeout);
+    active=null;
+    if(!disposed)setLoading(false);
+   }
+  }
+  void load(true);
+  const stop=watchActivityRefresh(()=>{if(Date.now()-lastRead>=60000)void load();},()=>{});
+  return()=>{disposed=true;stop();active?.abort();};
  },[days,refresh,onSessionExpired]);
 
+ const report=result?.days===days?result.report:null;
  const rows=report?.rows||[];
  const events=report?.events||[];
  const find=keyword.trim().toLocaleLowerCase('ko-KR');
@@ -78,12 +97,12 @@ export function SphGuidePanel({days,onDays,onSessionExpired}:{days:number;onDays
      <td className="private-time"><time dateTime={event.at}>{clock.format(new Date(event.at))}</time></td>
      <td className="sph-guide-ip"><div className="sph-guide-ip-line"><code>{event.ip||'확인 불가'}</code>{activityDeviceLabel(event.ip)&&<span className="private-self-tag" title="등록된 관리자 IP">{activityDeviceLabel(event.ip)}</span>}{(event.city||event.country)&&<small title="접속 지역">{[event.country,event.city].filter(Boolean).join(' · ')}</small>}</div></td>
      <td><span className="sph-guide-action">{GUIDE_ACTIVITY_LABELS[event.action]||event.action}</span></td>
-     <td className="sph-guide-detail">{event.detail?<span className="sph-guide-detail-text" title={event.detail}>{event.detail}</span>:<span className="sph-guide-missing">세부 내용 미전송</span>}</td>
+     <td className="sph-guide-detail">{event.detail?<span className="sph-guide-detail-text" title={event.detail}>{event.detail}</span>:<span className="sph-guide-missing">—</span>}</td>
     </tr>)}</tbody>
    </table>{!visible.length&&<div className="private-empty" role="status"><strong>{loading&&!report?'활동 기록을 불러오는 중입니다.':error?'조회에 실패했습니다.':find||actionFilter!=='all'?'검색 조건에 맞는 기록이 없습니다.':'아직 상세 활동 기록이 없습니다.'}</strong><span>상세 내역은 기록 기능 업데이트 이후부터 표시됩니다.</span></div>}</div>
    <div className="sph-records-footer"><span>{number.format(visible.length)}건 표시 · 최대 100건 조회</span><span>{report?'마지막 조회 '+clock.format(new Date(report.generatedAt)):'—'} · 한국 시간</span></div>
   </section>
-  <p className="sph-simple-footnote">접속 IP와 수신 시각은 관리자 서버에서 기록합니다. 현재 SPH가 보내는 정보는 방문·서비스 선택·예시 선택·질문 전송 여부뿐이며, 클릭 대상이나 질문 내용은 원 서비스에서 별도로 보내는 경우에만 표시됩니다. 과거 익명 집계는 개별 IP·시각을 복원할 수 없습니다. 입력 중인 키나 화면 이동은 수집하지 않으며 자동 새로고침·Blob 조회를 하지 않습니다.</p>
+  <p className="sph-simple-footnote">관리자 서버는 접속 IP와 수신 시각을 기록합니다. 새 가이드 기록에는 접속, 서비스 선택, 예시 선택, 질문 전송, 주요 버튼 클릭 횟수가 표시됩니다. 과거에 저장된 상세 내용은 해당 기록에서 확인할 수 있습니다.</p>
   <section className="private-records sph-guide-daily" aria-label="가이드 일별 활동 집계" aria-busy={loading}>
    <div className="sph-activity-toolbar"><div className="sph-activity-toolbar-heading"><strong>일별 활동 집계</strong><span>{days===1?'오늘':days+'일'}</span></div></div>
    <div className="private-table-scroll"><table className="sph-guide-table">

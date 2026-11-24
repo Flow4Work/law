@@ -59,7 +59,8 @@ export async function POST(request:Request){
   const country=(request.headers.get('x-vercel-ip-country')||'').slice(0,2).toUpperCase();
   const rawCity=request.headers.get('x-vercel-ip-city')||'';
   let city='';try{city=decodeURIComponent(rawCity).slice(0,80)}catch{/* Unavailable. */}
-  await appendGuideActivities(events,address,/^[A-Z]{2}$/.test(country)?country:'',city);
+  const inserted=await appendGuideActivities(events,address,/^[A-Z]{2}$/.test(country)?country:'',city);
+  if(inserted.length)console.info('[sph-guide-activity] stored',inserted.join(','));
   return new Response(null,{status:204,headers});
  }catch{
   console.warn('[sph-guide-activity] Activity database unavailable');
