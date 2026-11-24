@@ -34,7 +34,7 @@ export async function appendDatabaseActivities(events:ActivityEvent[]){
  const params:string[]=[];
  const tuples=events.map((event,i)=>{
   params.push(event.id,event.at,event.site||'sph',event.action,privateIpKey(event.ip),
-   privateIpKey('visitor|'+(event.visitorId||event.ip)),event.country,event.district,encryptActivity(event));
+   event.anonymous?'':privateIpKey('visitor|'+(event.visitorId||event.ip)),event.country,event.district,encryptActivity(event));
   return '('+Array.from({length:9},(_,j)=>'$'+(i*9+j+1)).join(',')+')';
  });
  const inserted=await database().query(`INSERT INTO law_activity.events(id,at,site,action,ip_key,visitor_key,country,district,payload)
@@ -45,14 +45,14 @@ function koreanDayStart(daysAgo=0){
  const date=new Date(Date.now()+(9*3600000)-(daysAgo*86400000));
  return date.toISOString().slice(0,10)+'T00:00:00+09:00';
 }
-export type GuideIncomingEvent={id:string;action:GuideAction;detail:string;visitorId:string;at:string};
+export type GuideIncomingEvent={id:string;action:GuideAction;detail:string;visitorId?:string;anonymous?:true;at:string};
 export async function appendGuideActivities(events:GuideIncomingEvent[],address:{ip:string;ipVersion:string},country:string,city:string){
  if(!events.length||events.length>5)throw new Error('Invalid guide batch');
  const params:string[]=[];
  const tuples=events.map((item,i)=>{
   const record:GuideActivityRecord={...item,ip:address.ip,ipVersion:address.ipVersion,page:'/',country,city};
   params.push('guide:'+item.id,item.at,'sph-guide',item.action,privateIpKey(address.ip),
-   privateIpKey('guide-visitor|'+item.visitorId),country,'',encryptActivity(record));
+   item.anonymous?'':privateIpKey('guide-visitor|'+item.visitorId),country,'',encryptActivity(record));
   return '('+Array.from({length:9},(_,j)=>'$'+(i*9+j+1)).join(',')+')';
  });
  const inserted=await database().query(
@@ -104,7 +104,7 @@ export async function readDatabaseReport(days:number,site:ActivitySite,cursor:Ac
  SELECT id,at,action,ip_key,visitor_key,country,district FROM law_activity.events WHERE site=$1 AND at>=$2 AND at<=$3
  ), stats AS (SELECT count(*)::int total,count(*) FILTER(WHERE action='visit')::int visits,
  count(*) FILTER(WHERE action='query')::int queries,count(*) FILTER(WHERE action='click')::int clicks,count(*) FILTER(WHERE action='view_step')::int views,
- count(DISTINCT ip_key) FILTER(WHERE ip_key<>$6 AND ip_key<>$11)::int "uniqueIps",count(DISTINCT visitor_key)::int visitors FROM selected),
+ count(DISTINCT ip_key) FILTER(WHERE ip_key<>$6 AND ip_key<>$11)::int "uniqueIps",count(DISTINCT NULLIF(visitor_key,''))::int visitors FROM selected),
  regions AS (SELECT country,district,count(*)::int total FROM selected GROUP BY country,district),
  owner_key AS (SELECT ip_key FROM law_activity.events WHERE at>=$2 AND at<=$3 AND district='광진구' AND ip_key NOT IN ($6,$7)
  GROUP BY ip_key ORDER BY count(*) DESC,max(at) DESC LIMIT 1),

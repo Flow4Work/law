@@ -26,14 +26,18 @@ export function OPTIONS(request:Request){
 
 export async function POST(request:Request){
  if(request.headers.get('origin')!==origin)return new Response(null,{status:403});
+ if(request.headers.get('dnt')==='1')return new Response(null,{status:204,headers});
  if(!activityDatabaseConfigured())return new Response(null,{status:503,headers});
  if(Number(request.headers.get('content-length'))>5000)return new Response(null,{status:413,headers});
  const events:GuideIncomingEvent[]=[];
+ let anonymous=request.headers.get('sec-gpc')==='1';
  try{
   const raw=await request.text();
   if(raw.length>5000)return new Response(null,{status:413,headers});
   const body=JSON.parse(raw);
-  if(!body||Object.keys(body).length!==1||!Array.isArray(body.events)||!body.events.length||body.events.length>5)throw new Error();
+  if(!body||Object.keys(body).some(key=>key!=='events'&&key!=='anonymous')||
+   (body.anonymous!==undefined&&typeof body.anonymous!=='boolean')||!Array.isArray(body.events)||!body.events.length||body.events.length>5)throw new Error();
+  anonymous||=body.anonymous===true;
   const receivedAt=new Date().toISOString(),now=Date.parse(receivedAt);
   for(const item of body.events){
    if(!item||typeof item!=='object'||Object.keys(item).some(key=>!['id','action','detail','visitorId','at'].includes(key))||
@@ -44,10 +48,10 @@ export async function POST(request:Request){
     (item.at!==undefined&&(typeof item.at!=='string'||!Number.isFinite(Date.parse(item.at)))))throw new Error();
    const action=item.action as GuideAction;
    const maxLength=action==='query'||action==='example'?350:140;
-   const detail=scrub((item.detail||'').slice(0,1000)).slice(0,maxLength);
+   const detail=anonymous?'':scrub((item.detail||'').slice(0,1000)).slice(0,maxLength);
    const eventTime=item.at?Date.parse(item.at):now;
    const at=eventTime<=now&&now-eventTime<=120000?new Date(eventTime).toISOString():receivedAt;
-   events.push({id:item.id,action,detail,visitorId:item.visitorId||item.id,at});
+   events.push({id:item.id,action,detail,...(anonymous?{anonymous:true}:{visitorId:item.visitorId||item.id}),at});
   }
  }catch{return new Response(null,{status:400,headers})}
  const address=requestAddress(request.headers);
@@ -59,8 +63,9 @@ export async function POST(request:Request){
   const country=(request.headers.get('x-vercel-ip-country')||'').slice(0,2).toUpperCase();
   const rawCity=request.headers.get('x-vercel-ip-city')||'';
   let city='';try{city=decodeURIComponent(rawCity).slice(0,80)}catch{/* Unavailable. */}
-  const inserted=await appendGuideActivities(events,address,/^[A-Z]{2}$/.test(country)?country:'',city);
-  if(inserted.length)console.info('[sph-guide-activity] stored',inserted.join(','));
+  const storedAddress=anonymous?{ip:'',ipVersion:''}:address;
+  const inserted=await appendGuideActivities(events,storedAddress,!anonymous&&/^[A-Z]{2}$/.test(country)?country:'',anonymous?'':city);
+  if(inserted.length)console.info('[sph-guide-activity] stored',inserted.join(','),anonymous?'anonymous':'standard');
   return new Response(null,{status:204,headers});
  }catch{
   console.warn('[sph-guide-activity] Activity database unavailable');

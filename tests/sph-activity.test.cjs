@@ -103,3 +103,42 @@ test('guide records timestamped encrypted IP, submitted text and button actions,
   assert.equal(blobCalls,0);
  }finally{await db.close()}
 });
+
+test('GPC keeps both sites visible without storing identifying fields and DNT ignores events',async()=>{
+ const db=new PGlite();
+ await db.exec(fs.readFileSync(path.join(root,'migrations/001-private-activity.sql'),'utf8'));
+ const load=loader({'@neondatabase/serverless':{neon:()=>({query:async(sql,args)=>(await db.query(sql,args)).rows})}});
+ const store=load('src/lib/activity-db.ts'),cipher=load('src/lib/activity-crypto.ts');
+ try{
+  for(const [route,site,host] of [
+   ['sph-activity','sph','sph-opportunity-agent.vercel.app'],
+   ['sph-guide-activity','sph-guide','sph-field-guide-six.vercel.app']
+  ]){
+   const {POST}=load('src/app/api/'+route+'/route.ts');
+   const event={id:crypto.randomUUID(),action:'visit',detail:site==='sph'?'서비스 접속':'legacy input'};
+   const post=(body,headers)=>POST(new Request('https://law-lake-theta.vercel.app/api/'+route,{
+    method:'POST',headers:{origin:'https://'+host,'x-vercel-forwarded-for':'203.0.113.44',
+     'x-vercel-ip-country':'KR','x-vercel-ip-city':'Seoul',...headers},body:JSON.stringify(body)
+   }));
+   assert.equal((await post({events:[event],anonymous:true},{dnt:'1'})).status,204);
+   assert.equal((await post({events:[event],anonymous:true},{})).status,204);
+   assert.equal((await post({events:[event]},{'sec-gpc':'1'})).status,204);
+   const rows=(await db.query('SELECT ip_key,visitor_key,payload FROM law_activity.events WHERE site=$1',[site])).rows;
+   assert.equal(rows.length,1);
+   assert.equal(rows[0].ip_key,cipher.privateIpKey(''));
+   assert.equal(rows[0].visitor_key,'');
+   const item=cipher.decryptActivity(rows[0].payload);
+   assert.equal(item.anonymous,true);
+   assert.equal(item.ip,'');
+   assert.equal(item.visitorId,undefined);
+   assert.equal(item.country,'');
+   assert.equal(item.city,'');
+   if(site==='sph-guide')assert.equal(item.detail,'');
+  }
+  const sales=await store.readDatabaseReport(1,'sph');
+  assert.equal(sales.visits,1);
+  assert.equal(sales.visitors,0);
+  assert.equal(sales.uniqueIps,0);
+  assert.equal((await store.readGuideActivity(1)).events[0].anonymous,true);
+ }finally{await db.close()}
+});

@@ -95,14 +95,14 @@ export function SphGuidePanel({days,onDays,onSessionExpired}:{days:number;onDays
     <thead><tr><th scope="col">발생 시간 (KST)</th><th scope="col">IP 주소</th><th scope="col">활동</th><th scope="col">클릭 항목 · 입력 내용</th></tr></thead>
     <tbody>{visible.map(event=><tr key={event.id}>
      <td className="private-time"><time dateTime={event.at}>{clock.format(new Date(event.at))}</time></td>
-     <td className="sph-guide-ip"><div className="sph-guide-ip-line"><code>{event.ip||'확인 불가'}</code>{activityDeviceLabel(event.ip)&&<span className="private-self-tag" title="등록된 관리자 IP">{activityDeviceLabel(event.ip)}</span>}{(event.city||event.country)&&<small title="접속 지역">{[event.country,event.city].filter(Boolean).join(' · ')}</small>}</div></td>
+     <td className="sph-guide-ip"><div className="sph-guide-ip-line"><code>{event.anonymous?'익명':event.ip||'확인 불가'}</code>{activityDeviceLabel(event.ip)&&<span className="private-self-tag" title="등록된 관리자 IP">{activityDeviceLabel(event.ip)}</span>}{(event.city||event.country)&&<small title="접속 지역">{[event.country,event.city].filter(Boolean).join(' · ')}</small>}</div></td>
      <td><span className="sph-guide-action">{GUIDE_ACTIVITY_LABELS[event.action]||event.action}</span></td>
      <td className="sph-guide-detail">{event.detail?<span className="sph-guide-detail-text" title={event.detail}>{event.detail}</span>:<span className="sph-guide-missing">—</span>}</td>
     </tr>)}</tbody>
    </table>{!visible.length&&<div className="private-empty" role="status"><strong>{loading&&!report?'활동 기록을 불러오는 중입니다.':error?'조회에 실패했습니다.':find||actionFilter!=='all'?'검색 조건에 맞는 기록이 없습니다.':'아직 상세 활동 기록이 없습니다.'}</strong><span>상세 내역은 기록 기능 업데이트 이후부터 표시됩니다.</span></div>}</div>
    <div className="sph-records-footer"><span>{number.format(visible.length)}건 표시 · 최대 100건 조회</span><span>{report?'마지막 조회 '+clock.format(new Date(report.generatedAt)):'—'} · 한국 시간</span></div>
   </section>
-  <p className="sph-simple-footnote">관리자 서버는 접속 IP와 수신 시각을 기록합니다. 새 가이드 기록에는 접속, 서비스 선택, 예시 선택, 질문 전송, 주요 버튼 클릭 횟수가 표시됩니다. 과거에 저장된 상세 내용은 해당 기록에서 확인할 수 있습니다.</p>
+  <p className="sph-simple-footnote">접속, 서비스 선택, 예시 선택, 질문 전송, 주요 버튼 클릭을 집계합니다. 익명 기록에는 수신 시각과 활동 종류가 표시됩니다.</p>
   <section className="private-records sph-guide-daily" aria-label="가이드 일별 활동 집계" aria-busy={loading}>
    <div className="sph-activity-toolbar"><div className="sph-activity-toolbar-heading"><strong>일별 활동 집계</strong><span>{days===1?'오늘':days+'일'}</span></div></div>
    <div className="private-table-scroll"><table className="sph-guide-table">

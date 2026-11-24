@@ -73,7 +73,7 @@ export function SphActivityPanel({report,busy,error,days,action,page,canPrevious
     <table className="sph-simple-table">
      <thead><tr><th>날짜와 시간 <ArrowDown size={13}/></th><th>접속 IP</th><th>활동</th><th>선택 항목</th></tr></thead>
      <tbody>{rows.map(event=>{
-      const owner=ownerLabel(event.ip,viewerIp);
+      const owner=event.anonymous?{text:'익명',kind:'unknown',explain:'방문자 식별 정보 없이 집계한 활동입니다.'}:ownerLabel(event.ip,viewerIp);
       return <tr key={event.id}>
        <td className="private-time"><Clock3 size={13}/><time dateTime={event.at}>{displayTime(event.at)}</time></td>
        <td><div className="sph-ip-cell">
